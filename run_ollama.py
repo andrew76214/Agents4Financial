@@ -12,7 +12,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
 
-from prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_TEXT_ONLY
+from example_code.prompts import SYSTEM_PROMPT, SYSTEM_PROMPT_TEXT_ONLY
 # 原先使用 OpenAI 的部分移除
 # from openai import OpenAI
 from utils import get_web_element_rect, encode_image, extract_information, print_message, \
