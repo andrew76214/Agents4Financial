@@ -1,11 +1,13 @@
-import os, csv
+import os
+import csv
 import datetime
 import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
+import concurrent.futures
 import whisper
+from youtube_transcript_api import YouTubeTranscriptApi
 
 class Video_Downloader:
-    def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10000):
+    def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10):
         """
         channel_url: 財經網紅頻道或直播清單 URL，例如：https://www.youtube.com/@yutinghaofinance/streams
         output_file: 儲存結果的 CSV 檔案路徑，預設存在 video 資料夾中
@@ -45,55 +47,62 @@ class Video_Downloader:
             print(f"無法取得影片 {video_id} 的逐字稿: {e}")
             return ""
 
+    def process_single_video(self, video):
+        """
+        處理單一影片的資訊取得，回傳包含影片基本資料的字典。
+        """
+        if video is None:
+            return None
+        video_id = video.get('id')
+        title = video.get('title', 'No Title')
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        transcript = self.download_transcript(video_id)
+        return {
+            "video_id": video_id,
+            "title": title,
+            "url": url,
+            "transcript": transcript,
+            "date": self.today_str
+        }
+
     def process_videos(self):
         """
-        依序處理影片列表，取得每支影片的基本資訊及逐字稿，並存入 video_info_list。
+        使用 ThreadPoolExecutor 同時處理兩部影片，
+        並在每部影片完成後，立即將資訊寫入 CSV 檔案中。
         """
         videos = self.fetch_video_list()
-        count = 0
-        for video in videos:
-            if count >= self.max_videos:
-                break
-            if video is None:
-                continue
+        videos_to_process = [video for video in videos if video is not None][:self.max_videos]
 
-            video_id = video.get('id')
-            title = video.get('title', 'No Title')
-            url = f"https://www.youtube.com/watch?v={video_id}"
-            transcript = self.download_transcript(video_id)
-
-            self.video_info_list.append({
-                "video_id": video_id,
-                "title": title,
-                "url": url,
-                "transcript": transcript,
-                "date": self.today_str
-            })
-            count += 1
-
-    def save_to_csv(self):
-        """
-        將收集到的影片資訊儲存成 CSV 檔案，並確保儲存資料夾存在。
-        """
+        # 確保輸出資料夾存在
         folder = os.path.dirname(self.output_file)
         if folder and not os.path.exists(folder):
             os.makedirs(folder)
             print(f"建立資料夾：{folder}")
 
         keys = ["video_id", "title", "url", "transcript", "date"]
+
+        # 開啟 CSV 檔案並先寫入表頭
         with open(self.output_file, "w", newline='', encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=keys)
             writer.writeheader()
-            for info in self.video_info_list:
-                writer.writerow(info)
-        print(f"已儲存影片資訊至 {self.output_file}")
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                future_to_video = {
+                    executor.submit(self.process_single_video, video): video for video in videos_to_process
+                }
+                for future in concurrent.futures.as_completed(future_to_video):
+                    res = future.result()
+                    if res:
+                        writer.writerow(res)
+                        self.video_info_list.append(res)
+                        print(f"已儲存影片 {res['video_id']} 資訊到 CSV")
+        print(f"所有影片資訊已儲存至 {self.output_file}")
 
     def run(self):
         """
-        主流程：處理影片資訊後儲存至 CSV。
+        主流程：處理影片資訊後立即儲存到 CSV。
         """
         self.process_videos()
-        self.save_to_csv()
 
 
 class Video_Downloader_With_Whisper(Video_Downloader):
@@ -106,7 +115,6 @@ class Video_Downloader_With_Whisper(Video_Downloader):
         使用 yt-dlp 下載影片的最高畫質（結合最佳影片與最佳音訊），
         然後利用 Whisper 模型將影片中的音訊轉成文字。
         """
-        # 確保 video 資料夾存在
         video_dir = "video"
         if not os.path.exists(video_dir):
             os.makedirs(video_dir)
@@ -121,11 +129,9 @@ class Video_Downloader_With_Whisper(Video_Downloader):
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
-            # 取得下載後的完整檔案路徑
             filename = ydl.prepare_filename(info)
             print(f"下載完成，檔案儲存於: {filename}")
 
-        # 載入 Whisper 模型（只載入一次）
         if self.whisper_model is None:
             try:
                 print("載入 Whisper 模型...")
@@ -134,39 +140,59 @@ class Video_Downloader_With_Whisper(Video_Downloader):
                 print("請先安裝 openai-whisper: pip install openai-whisper")
                 raise e
 
-        # 進行語音轉文字
         print("使用 Whisper 進行語音轉文字...")
         result = self.whisper_model.transcribe(filename)
         transcript = result.get("text", "")
         return transcript
 
+    def process_single_video(self, video):
+        """
+        覆寫 process_single_video，若無法取得逐字稿則使用 Whisper 模型處理。
+        """
+        if video is None:
+            return None
+        video_id = video.get('id')
+        title = video.get('title', 'No Title')
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        transcript = self.download_transcript(video_id)
+        if not transcript:
+            print(f"影片 {video_id} 沒有提供逐字稿，改用 Whisper 處理...")
+            transcript = self.download_video_and_transcribe(video_id)
+        return {
+            "video_id": video_id,
+            "title": title,
+            "url": url,
+            "transcript": transcript,
+            "date": self.today_str
+        }
+
     def process_videos(self):
         """
-        依序處理影片列表，若原始逐字稿取得失敗則使用 Whisper 模型產生逐字稿。
+        同樣使用 ThreadPoolExecutor 同時處理兩部影片，
+        並在每部影片完成後立即寫入 CSV 檔案中。
         """
         videos = self.fetch_video_list()
-        count = 0
-        for video in videos:
-            if count >= self.max_videos:
-                break
-            if video is None:
-                continue
+        videos_to_process = [video for video in videos if video is not None][:self.max_videos]
 
-            video_id = video.get('id')
-            title = video.get('title', 'No Title')
-            url = f"https://www.youtube.com/watch?v={video_id}"
-            transcript = self.download_transcript(video_id)
+        folder = os.path.dirname(self.output_file)
+        if folder and not os.path.exists(folder):
+            os.makedirs(folder)
+            print(f"建立資料夾：{folder}")
 
-            # 當逐字稿為空時，使用 Whisper 模型產生逐字稿
-            if not transcript:
-                print(f"影片 {video_id} 沒有提供逐字稿，改用 Whisper 處理...")
-                transcript = self.download_video_and_transcribe(video_id)
+        keys = ["video_id", "title", "url", "transcript", "date"]
 
-            self.video_info_list.append({
-                "video_id": video_id,
-                "title": title,
-                "url": url,
-                "transcript": transcript,
-                "date": self.today_str
-            })
-            count += 1
+        with open(self.output_file, "w", newline='', encoding="utf-8") as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=keys)
+            writer.writeheader()
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                future_to_video = {
+                    executor.submit(self.process_single_video, video): video for video in videos_to_process
+                }
+                for future in concurrent.futures.as_completed(future_to_video):
+                    res = future.result()
+                    if res:
+                        writer.writerow(res)
+                        self.video_info_list.append(res)
+                        print(f"已儲存影片 {res['video_id']} 資訊到 CSV")
+        print(f"所有影片資訊已儲存至 {self.output_file}")
