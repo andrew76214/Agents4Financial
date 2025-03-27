@@ -3,16 +3,12 @@ import csv
 import datetime
 import yt_dlp
 import concurrent.futures
+import threading
 import whisper
 from youtube_transcript_api import YouTubeTranscriptApi
 
 class Video_Downloader:
     def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10):
-        """
-        channel_url: 財經網紅頻道或直播清單 URL，例如：https://www.youtube.com/@yutinghaofinance/streams
-        output_file: 儲存結果的 CSV 檔案路徑，預設存在 video 資料夾中
-        max_videos: 要處理的最大影片數（預設 10 支，可依需求調整）
-        """
         self.channel_url = channel_url
         self.output_file = output_file
         self.max_videos = max_videos
@@ -20,14 +16,11 @@ class Video_Downloader:
         self.today_str = datetime.datetime.now().strftime("%Y%m%d")
 
     def fetch_video_list(self):
-        """
-        使用 yt-dlp 從頻道 URL 擷取影片列表（採用 extract_flat 加速處理）。
-        """
         ydl_opts = {
             'ignoreerrors': True,
             'quiet': True,
             'skip_download': True,
-            'extract_flat': True  # 僅擷取影片列表，不取得完整資訊
+            'extract_flat': True
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(self.channel_url, download=False)
@@ -35,10 +28,6 @@ class Video_Downloader:
             return videos
 
     def download_transcript(self, video_id):
-        """
-        利用 youtube-transcript-api 嘗試取得影片逐字稿，
-        若無法取得則回傳空字串。
-        """
         try:
             transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'zh-TW'])
             transcript_text = " ".join([seg['text'] for seg in transcript_data])
@@ -48,9 +37,6 @@ class Video_Downloader:
             return ""
 
     def process_single_video(self, video):
-        """
-        處理單一影片的資訊取得，回傳包含影片基本資料的字典。
-        """
         if video is None:
             return None
         video_id = video.get('id')
@@ -66,14 +52,9 @@ class Video_Downloader:
         }
 
     def process_videos(self):
-        """
-        使用 ThreadPoolExecutor 同時處理兩部影片，
-        並在每部影片完成後，立即將資訊寫入 CSV 檔案中。
-        """
         videos = self.fetch_video_list()
         videos_to_process = [video for video in videos if video is not None][:self.max_videos]
 
-        # 確保輸出資料夾存在
         folder = os.path.dirname(self.output_file)
         if folder and not os.path.exists(folder):
             os.makedirs(folder)
@@ -81,7 +62,6 @@ class Video_Downloader:
 
         keys = ["video_id", "title", "url", "transcript", "date"]
 
-        # 開啟 CSV 檔案並先寫入表頭
         with open(self.output_file, "w", newline='', encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=keys)
             writer.writeheader()
@@ -99,22 +79,27 @@ class Video_Downloader:
         print(f"所有影片資訊已儲存至 {self.output_file}")
 
     def run(self):
-        """
-        主流程：處理影片資訊後立即儲存到 CSV。
-        """
         self.process_videos()
 
 
 class Video_Downloader_With_Whisper(Video_Downloader):
     def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10):
         super().__init__(channel_url, output_file, max_videos)
-        self.whisper_model = None  # 模型會在首次需要時載入
+        # 使用 thread-local storage 為每個執行緒建立自己的 Whisper 模型實例
+        self.local = threading.local()
+
+    def get_whisper_model(self):
+        # 如果目前執行緒還未載入模型，就載入並儲存在 thread-local storage 中
+        if not hasattr(self.local, "whisper_model"):
+            try:
+                print("載入 Whisper 模型...")
+                self.local.whisper_model = whisper.load_model("large-v3")
+            except ImportError as e:
+                print("請先安裝 openai-whisper: pip install openai-whisper")
+                raise e
+        return self.local.whisper_model
 
     def download_video_and_transcribe(self, video_id):
-        """
-        使用 yt-dlp 下載影片的最高畫質（結合最佳影片與最佳音訊），
-        然後利用 Whisper 模型將影片中的音訊轉成文字。
-        """
         video_dir = "video"
         if not os.path.exists(video_dir):
             os.makedirs(video_dir)
@@ -132,23 +117,13 @@ class Video_Downloader_With_Whisper(Video_Downloader):
             filename = ydl.prepare_filename(info)
             print(f"下載完成，檔案儲存於: {filename}")
 
-        if self.whisper_model is None:
-            try:
-                print("載入 Whisper 模型...")
-                self.whisper_model = whisper.load_model("large-v3")
-            except ImportError as e:
-                print("請先安裝 openai-whisper: pip install openai-whisper")
-                raise e
-
+        model = self.get_whisper_model()
         print("使用 Whisper 進行語音轉文字...")
-        result = self.whisper_model.transcribe(filename)
+        result = model.transcribe(filename)
         transcript = result.get("text", "")
         return transcript
 
     def process_single_video(self, video):
-        """
-        覆寫 process_single_video，若無法取得逐字稿則使用 Whisper 模型處理。
-        """
         if video is None:
             return None
         video_id = video.get('id')
@@ -167,10 +142,6 @@ class Video_Downloader_With_Whisper(Video_Downloader):
         }
 
     def process_videos(self):
-        """
-        同樣使用 ThreadPoolExecutor 同時處理兩部影片，
-        並在每部影片完成後立即寫入 CSV 檔案中。
-        """
         videos = self.fetch_video_list()
         videos_to_process = [video for video in videos if video is not None][:self.max_videos]
 
