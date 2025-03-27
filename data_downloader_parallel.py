@@ -66,7 +66,7 @@ class Video_Downloader:
             writer = csv.DictWriter(csvfile, fieldnames=keys)
             writer.writeheader()
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
                 future_to_video = {
                     executor.submit(self.process_single_video, video): video for video in videos_to_process
                 }
@@ -87,6 +87,7 @@ class Video_Downloader_With_Whisper(Video_Downloader):
         super().__init__(channel_url, output_file, max_videos)
         # 使用 thread-local storage 為每個執行緒建立自己的 Whisper 模型實例
         self.local = threading.local()
+        self.initial_prompt = "各位觀眾大家早安！"
 
     def get_whisper_model(self):
         # 如果目前執行緒還未載入模型，就載入並儲存在 thread-local storage 中
@@ -119,7 +120,7 @@ class Video_Downloader_With_Whisper(Video_Downloader):
 
         model = self.get_whisper_model()
         print("使用 Whisper 進行語音轉文字...")
-        result = model.transcribe(filename)
+        result = model.transcribe(filename, initial_prompt=self.initial_prompt)
         transcript = result.get("text", "")
         return transcript
 
