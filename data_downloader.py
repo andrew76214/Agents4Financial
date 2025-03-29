@@ -5,10 +5,6 @@ import yt_dlp
 import subprocess
 from youtube_transcript_api import YouTubeTranscriptApi
 import nemo.collections.asr as nemo_asr
-from dotenv import load_dotenv
-
-# 讀取 .env 檔案中的環境變數（若有其他設定）
-load_dotenv()
 
 def convert_to_mono(input_file, output_file):
     """
@@ -19,19 +15,26 @@ def convert_to_mono(input_file, output_file):
     print(f"已將 {input_file} 轉換為單聲道並儲存至 {output_file}")
 
 class VideoDownloader:
-    def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10000):
+    def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10000,
+                 cookies_file=None, cookies_browser=None):
         """
         channel_url: 財經網紅頻道或直播清單 URL，例如：https://www.youtube.com/@yutinghaofinance/streams
         output_file: 儲存結果的 CSV 檔案路徑，預設存在 video 資料夾中
         max_videos: 要處理的最大影片數（預設 10000，可依需求調整）
+        cookies_file: 若使用 cookies 檔案驗證，請填入檔案路徑（例如："your_cookies.txt"），否則設定為 None
+        cookies_browser: 若使用瀏覽器自動導入 cookies，請填入瀏覽器名稱（例如："chrome"），否則設定為 None
         """
         self.channel_url = channel_url
         self.output_file = output_file
         self.max_videos = max_videos
         self.video_info_list = []
         self.today_str = datetime.datetime.now().strftime("%Y%m%d")
-        # 載入 Nemo ASR 模型
+        # 載入 Nemo ASR 模型後，轉換為半精度以降低 VRAM 使用量
         self.asr_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/canary-1b-flash")
+        self.asr_model = self.asr_model.half()
+
+        self.cookies_file = None
+        self.cookies_browser = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3" if cookies_browser is None else cookies_browser
 
     def fetch_video_list(self):
         """
@@ -43,6 +46,12 @@ class VideoDownloader:
             'skip_download': True,
             'extract_flat': True  # 僅擷取影片列表，不取得完整資訊
         }
+        # 根據設定加入 cookies 選項
+        if self.cookies_file:
+            ydl_opts['cookies'] = self.cookies_file
+        elif self.cookies_browser:
+            ydl_opts['cookies-from-browser'] = self.cookies_browser
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(self.channel_url, download=False)
             videos = info.get('entries', [])
@@ -80,6 +89,12 @@ class VideoDownloader:
             'outtmpl': f"{video_dir}/{video_id}.%(ext)s",
             'quiet': True,
         }
+        # 根據設定加入 cookies 選項
+        if self.cookies_file:
+            ydl_opts['cookies'] = self.cookies_file
+        elif self.cookies_browser:
+            ydl_opts['cookies-from-browser'] = self.cookies_browser
+
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
             downloaded_file = ydl.prepare_filename(info)
@@ -91,7 +106,7 @@ class VideoDownloader:
 
         print("使用 Nemo ASR 模型進行語音轉文字...")
         # 傳入單聲道的音檔進行轉錄
-        transcriptions = self.asr_model.transcribe([mono_audio_file])
+        transcriptions = self.asr_model.transcribe([mono_audio_file], batch_size=1)
         transcript = transcriptions[0] if transcriptions else ""
         return transcript
 
@@ -158,7 +173,12 @@ def main():
     channel_url = "https://www.youtube.com/@yutinghaofinance/streams"
     max_videos = 10000
     output_file = "video/yutinghao_finance_videos.csv"
-    downloader = VideoDownloader(channel_url, output_file, max_videos)
+    # 手動設定 cookies
+    # 若使用 cookies 檔案驗證，請提供 cookies_file 的檔案路徑；或使用瀏覽器自動導入 cookies，請指定瀏覽器名稱
+    cookies_file = "your_cookies.txt"  # 如果不使用，請改為 None
+    cookies_browser = None  # 例如 "chrome"，若不使用則設為 None
+
+    downloader = VideoDownloader(channel_url, output_file, max_videos, cookies_file, cookies_browser)
     downloader.run()
 
 if __name__ == '__main__':
