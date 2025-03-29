@@ -2,8 +2,21 @@ import os
 import csv
 import datetime
 import yt_dlp
+import subprocess
 from youtube_transcript_api import YouTubeTranscriptApi
 import nemo.collections.asr as nemo_asr
+from dotenv import load_dotenv
+
+# 讀取 .env 檔案中的環境變數（若有其他設定）
+load_dotenv()
+
+def convert_to_mono(input_file, output_file):
+    """
+    利用 ffmpeg 將輸入檔案轉換成單聲道音訊。
+    """
+    command = ["ffmpeg", "-y", "-i", input_file, "-ac", "1", output_file]
+    subprocess.run(command, check=True)
+    print(f"已將 {input_file} 轉換為單聲道並儲存至 {output_file}")
 
 class VideoDownloader:
     def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10000):
@@ -62,19 +75,23 @@ class VideoDownloader:
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
         ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',
+            'format': 'bestaudio/best',
             'merge_output_format': 'mp4',
             'outtmpl': f"{video_dir}/{video_id}.%(ext)s",
             'quiet': True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=True)
-            filename = ydl.prepare_filename(info)
-            print(f"下載完成，檔案儲存於: {filename}")
+            downloaded_file = ydl.prepare_filename(info)
+            print(f"下載完成，檔案儲存於: {downloaded_file}")
+
+        # 轉換下載的影片音訊為單聲道 wav 檔案
+        mono_audio_file = os.path.join(video_dir, f"{video_id}_mono.wav")
+        convert_to_mono(downloaded_file, mono_audio_file)
 
         print("使用 Nemo ASR 模型進行語音轉文字...")
-        # 以 Nemo ASR 模型進行轉錄，注意 transcribe 接收的是檔案路徑列表
-        transcriptions = self.asr_model.transcribe([filename])
+        # 傳入單聲道的音檔進行轉錄
+        transcriptions = self.asr_model.transcribe([mono_audio_file])
         transcript = transcriptions[0] if transcriptions else ""
         return transcript
 
