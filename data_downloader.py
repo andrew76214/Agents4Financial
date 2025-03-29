@@ -2,14 +2,19 @@ import os, csv
 import datetime
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
-import whisper
+import openai
+from dotenv import load_dotenv
+
+# 從 .env 檔案中讀取環境變數
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 class Video_Downloader:
     def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10000):
         """
         channel_url: 財經網紅頻道或直播清單 URL，例如：https://www.youtube.com/@yutinghaofinance/streams
         output_file: 儲存結果的 CSV 檔案路徑，預設存在 video 資料夾中
-        max_videos: 要處理的最大影片數（預設 10 支，可依需求調整）
+        max_videos: 要處理的最大影片數（預設 10000，可依需求調整）
         """
         self.channel_url = channel_url
         self.output_file = output_file
@@ -99,12 +104,12 @@ class Video_Downloader:
 class Video_Downloader_With_Whisper(Video_Downloader):
     def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10):
         super().__init__(channel_url, output_file, max_videos)
-        self.whisper_model = None  # 模型會在首次需要時載入
+        # 使用 OpenAI 的 Whisper API，不再需要本地模型載入
 
     def download_video_and_transcribe(self, video_id):
         """
         使用 yt-dlp 下載影片的最高畫質（結合最佳影片與最佳音訊），
-        然後利用 Whisper 模型將影片中的音訊轉成文字。
+        然後利用 OpenAI Whisper API 將影片中的音訊轉成文字。
         """
         # 確保 video 資料夾存在
         video_dir = "video"
@@ -125,24 +130,16 @@ class Video_Downloader_With_Whisper(Video_Downloader):
             filename = ydl.prepare_filename(info)
             print(f"下載完成，檔案儲存於: {filename}")
 
-        # 載入 Whisper 模型（只載入一次）
-        if self.whisper_model is None:
-            try:
-                print("載入 Whisper 模型...")
-                self.whisper_model = whisper.load_model("large-v3")
-            except ImportError as e:
-                print("請先安裝 openai-whisper: pip install openai-whisper")
-                raise e
-
-        # 進行語音轉文字
-        print("使用 Whisper 進行語音轉文字...")
-        result = self.whisper_model.transcribe(filename)
+        # 呼叫 OpenAI Whisper API 進行語音轉文字
+        print("使用 OpenAI Whisper API 進行語音轉文字...")
+        with open(filename, "rb") as audio_file:
+            result = openai.Audio.transcribe("whisper-1", audio_file)
         transcript = result.get("text", "")
         return transcript
 
     def process_videos(self):
         """
-        依序處理影片列表，若原始逐字稿取得失敗則使用 Whisper 模型產生逐字稿。
+        依序處理影片列表，若原始逐字稿取得失敗則使用 OpenAI Whisper API 產生逐字稿。
         """
         videos = self.fetch_video_list()
         count = 0
@@ -157,9 +154,9 @@ class Video_Downloader_With_Whisper(Video_Downloader):
             url = f"https://www.youtube.com/watch?v={video_id}"
             transcript = self.download_transcript(video_id)
 
-            # 當逐字稿為空時，使用 Whisper 模型產生逐字稿
+            # 當逐字稿為空時，使用 OpenAI Whisper API 產生逐字稿
             if not transcript:
-                print(f"影片 {video_id} 沒有提供逐字稿，改用 Whisper 處理...")
+                print(f"影片 {video_id} 沒有提供逐字稿，改用 OpenAI Whisper API 處理...")
                 transcript = self.download_video_and_transcribe(video_id)
 
             self.video_info_list.append({
@@ -170,3 +167,7 @@ class Video_Downloader_With_Whisper(Video_Downloader):
                 "date": self.today_str
             })
             count += 1
+
+# 使用範例：
+# downloader = Video_Downloader_With_Whisper("https://www.youtube.com/@yutinghaofinance/streams", max_videos=5)
+# downloader.run()
