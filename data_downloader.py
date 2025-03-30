@@ -33,7 +33,7 @@ class VideoDownloader:
         self.asr_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/canary-1b-flash")
         self.asr_model = self.asr_model.half()
 
-        self.cookies_file = None
+        self.cookies_file = "all_cookies.txt"
         self.cookies_browser = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3" if cookies_browser is None else cookies_browser
 
     def fetch_video_list(self):
@@ -106,7 +106,9 @@ class VideoDownloader:
 
         print("使用 Nemo ASR 模型進行語音轉文字...")
         # 傳入單聲道的音檔進行轉錄
-        transcriptions = self.asr_model.transcribe([mono_audio_file], batch_size=1)
+        transcriptions = self.asr_model.transcribe([mono_audio_file], 
+                                                   batch_size=1,
+                                                   num_workers=1)
         transcript = transcriptions[0] if transcriptions else ""
         return transcript
 
