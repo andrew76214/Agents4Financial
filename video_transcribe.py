@@ -44,7 +44,7 @@ class VideoDownloader:
         使用 OpenAI Whisper 模型產生逐字稿，
         並將結果存入 video_info_list。每處理完一部影片就存檔。
         """
-        video_dir = "stream_video"
+        video_dir = "stream_videos_2"
         if not os.path.exists(video_dir):
             print(f"資料夾 {video_dir} 不存在")
             return
@@ -104,11 +104,8 @@ class VideoDownloader:
         self.process_videos()
 
 def main():
-    """
-    主程式進入點：改成處理 stream_video/ 資料夾中的影片，因此不再需要頻道 URL 與 cookies 檔案。
-    """
     output_file = "video/yutinghao_finance_videos_v1.1.csv"
-    downloader = VideoDownloader("", output_file)
+    downloader = VideoDownloader(output_file)
     downloader.run()
 
 if __name__ == '__main__':
