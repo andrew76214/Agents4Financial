@@ -168,3 +168,10 @@ class Video_Downloader_With_Whisper(Video_Downloader):
                         self.video_info_list.append(res)
                         print(f"已儲存影片 {res['video_id']} 資訊到 CSV")
         print(f"所有影片資訊已儲存至 {self.output_file}")
+
+def main():
+    channel_url = "https://www.youtube.com/@yutinghaofinance/streams"
+    downloader = Video_Downloader_With_Whisper(channel_url, 
+                                            output_file="data/yutinghao_finance_videos.csv", 
+                                            max_videos=10000)
+    downloader.run()
