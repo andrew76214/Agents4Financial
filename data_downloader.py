@@ -4,11 +4,7 @@ import datetime
 import yt_dlp
 import subprocess
 from youtube_transcript_api import YouTubeTranscriptApi
-import nemo.collections.asr as nemo_asr
-from dotenv import load_dotenv
-
-# 讀取 .env 檔案中的環境變數（若有其他設定）
-load_dotenv()
+import whisper
 
 def convert_to_mono(input_file, output_file):
     """
@@ -30,8 +26,8 @@ class VideoDownloader:
         self.max_videos = max_videos
         self.video_info_list = []
         self.today_str = datetime.datetime.now().strftime("%Y%m%d")
-        # 載入 Nemo ASR 模型
-        self.asr_model = nemo_asr.models.ASRModel.from_pretrained("nvidia/canary-1b-flash")
+        # 使用 Whisper large-v3 模型，無需 API key
+        self.asr_model = whisper.load_model("large-v3")
 
     def fetch_video_list(self):
         """
@@ -41,7 +37,8 @@ class VideoDownloader:
             'ignoreerrors': True,
             'quiet': True,
             'skip_download': True,
-            'extract_flat': True  # 僅擷取影片列表，不取得完整資訊
+            'extract_flat': True,  # 僅擷取影片列表，不取得完整資訊
+            'cookies': 'all_cookies_new.txt'
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(self.channel_url, download=False)
@@ -64,7 +61,7 @@ class VideoDownloader:
 
     def download_video_and_transcribe(self, video_id):
         """
-        下載影片並使用 Nemo ASR 模型進行語音轉文字，
+        下載影片並使用 Whisper 模型進行語音轉文字，
         回傳轉換後的文字結果。
         """
         # 確保 video 資料夾存在
@@ -89,15 +86,15 @@ class VideoDownloader:
         mono_audio_file = os.path.join(video_dir, f"{video_id}_mono.wav")
         convert_to_mono(downloaded_file, mono_audio_file)
 
-        print("使用 Nemo ASR 模型進行語音轉文字...")
-        # 傳入單聲道的音檔進行轉錄
-        transcriptions = self.asr_model.transcribe([mono_audio_file])
-        transcript = transcriptions[0] if transcriptions else ""
+        print("使用 Whisper large-v3 模型進行語音轉文字...")
+        # 使用 Whisper 模型轉錄，並傳回轉換後的文字
+        result = self.asr_model.transcribe(mono_audio_file)
+        transcript = result.get("text", "")
         return transcript
 
     def process_videos(self):
         """
-        依序處理影片列表，若原始逐字稿取得失敗則使用 Nemo ASR 模型產生逐字稿，
+        依序處理影片列表，若原始逐字稿取得失敗則使用 Whisper 模型產生逐字稿，
         並將結果存入 video_info_list。
         """
         videos = self.fetch_video_list()
@@ -113,9 +110,9 @@ class VideoDownloader:
             url = f"https://www.youtube.com/watch?v={video_id}"
             transcript = self.download_transcript(video_id)
 
-            # 當逐字稿為空時，改用 Nemo ASR 模型進行語音轉文字
+            # 當逐字稿為空時，改用 Whisper 模型進行轉錄
             if not transcript:
-                print(f"影片 {video_id} 沒有提供逐字稿，改用 Nemo ASR 進行轉錄...")
+                print(f"影片 {video_id} 沒有提供逐字稿，改用 Whisper 進行轉錄...")
                 transcript = self.download_video_and_transcribe(video_id)
 
             self.video_info_list.append({

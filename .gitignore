@@ -1,5 +1,7 @@
 __pycache__/
 video/
 .env
-data/
 stream_video/
+stream_videos_2/
+all_cookies_new.txt
+nohup.out
