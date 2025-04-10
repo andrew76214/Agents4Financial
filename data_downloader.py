@@ -3,7 +3,7 @@ import csv
 import sys
 import datetime
 import yt_dlp
-from youtube_transcript_api import YouTubeTranscriptApi
+from langchain_community.document_loaders import YoutubeLoader
 
 class VideoDownloader:
     def __init__(self, channel_url, output_file="video/yutinghao_finance_videos.csv", max_videos=10000):
@@ -27,7 +27,7 @@ class VideoDownloader:
             os.makedirs(folder)
             print(f"建立資料夾：{folder}")
         if not os.path.exists(self.output_file):
-            with open(self.output_file, "w", newline='', encoding="utf-8") as csvfile:
+            with open(self.output_file, "w", newline="", encoding="utf-8") as csvfile:
                 writer = csv.DictWriter(csvfile, fieldnames=["video_id", "title", "url", "transcript", "date"])
                 writer.writeheader()
 
@@ -36,35 +36,44 @@ class VideoDownloader:
         使用 yt-dlp 從頻道 URL 擷取影片列表（僅取得影片基本資訊）。
         """
         ydl_opts = {
-            'ignoreerrors': True,
-            'quiet': True,
-            'skip_download': True,
-            'extract_flat': True,
+            "ignoreerrors": True,
+            "quiet": True,
+            "skip_download": True,
+            "extract_flat": True,
         }
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(self.channel_url, download=False)
-            videos = info.get('entries', [])
+            videos = info.get("entries", [])
             return videos
 
-    def download_transcript(self, video_id):
+    def download_transcript(self, video_url):
         """
-        利用 youtube-transcript-api 嘗試取得影片逐字稿，
+        利用 YoutubeLoader.from_youtube_url 嘗試取得影片逐字稿，
         若無法取得則回傳 None。
         """
         try:
-            transcript_data = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'zh-TW'])
-            transcript_text = " ".join([seg['text'] for seg in transcript_data])
-            print(f"取得影片 {video_id} 的逐字稿成功")
+            # 透過 from_youtube_url 傳入影片連結以及相關參數
+            loader = YoutubeLoader.from_youtube_url(
+                video_url,
+                add_video_info=True,
+                language=["en", "id"],
+                translation="en",
+            )
+            docs = loader.load()
+            if not docs:
+                return None
+            transcript_text = " ".join([doc.page_content for doc in docs])
+            print(f"取得影片 {video_url} 的逐字稿成功")
             return transcript_text
         except Exception as e:
-            print(f"無法取得影片 {video_id} 的逐字稿: {e}")
+            print(f"無法取得影片 {video_url} 的逐字稿: {e}")
             return None
 
     def append_to_csv(self, video_info):
         """
         將單一影片資訊附加到 CSV 檔案中
         """
-        with open(self.output_file, "a", newline='', encoding="utf-8") as csvfile:
+        with open(self.output_file, "a", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=["video_id", "title", "url", "transcript", "date"])
             writer.writerow(video_info)
         print(f"已將影片 {video_info['video_id']} 資訊儲存至 {self.output_file}")
@@ -81,19 +90,19 @@ class VideoDownloader:
                 break
             if video is None:
                 continue
-            video_id = video.get('id')
+            video_id = video.get("id")
             if not video_id:
                 continue
-            title = video.get('title', 'No Title')
-            url = f"https://www.youtube.com/watch?v={video_id}"
-            transcript = self.download_transcript(video_id)
+            title = video.get("title", "No Title")
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
+            transcript = self.download_transcript(video_url)
             if not transcript:
-                print(f"影片 {video_id} 沒有提供逐字稿，結束程式")
-                sys.exit(1)  # 遇到沒有逐字稿的影片就離開程式
+                print(f"影片 {video_url} 沒有提供逐字稿，結束程式")
+                sys.exit(1)
             video_info = {
                 "video_id": video_id,
                 "title": title,
-                "url": url,
+                "url": video_url,
                 "transcript": transcript,
                 "date": self.today_str
             }
