@@ -14,7 +14,7 @@ def transcribe_video(model, video_path, converter):
 
 def main():
     video_dir = "stream_video"            # 存放影片的資料夾
-    output_csv = "transcripts_video1.csv"   # 輸出 CSV 檔案
+    output_csv = "transcripts_video_v1.1.csv"   # 輸出 CSV 檔案
 
     # 載入 Whisper large-v3 模型
     print("正在載入 Whisper 模型，請稍候...")
@@ -32,7 +32,7 @@ def main():
 
         # 遍歷資料夾中的影片
         for filename in os.listdir(video_dir):
-            if filename.lower().endswith(('.mp4', '.mkv', '.avi')):
+            if filename.lower().endswith(('.mkv', 'webm')):
                 video_path = os.path.join(video_dir, filename)
                 print(f"開始處理影片：{filename}")
                 try:
