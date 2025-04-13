@@ -50,7 +50,7 @@ class MarketState(TypedDict):
     context: Dict[str, Any]  # 額外的市場數據
 
 class ReActMarketAgent:
-    def __init__(self, model_name: str = "llama3.2:3b"):
+    def __init__(self, model_name: str = "deepseek-r1:32b"):
         self.llm = ChatOllama(model=model_name)
         self.chain = self._build_chain()
         
@@ -80,20 +80,63 @@ class ReActMarketAgent:
         
         {state['summary']}
         
-        請以 JSON 格式回答，包含：
-        1. sentiment: 市場情緒 (BULLISH/BEARISH/NEUTRAL)
-        2. reasoning: 理由分析
+        請以下列格式回答：
+        {{
+            "sentiment": "BULLISH/BEARISH/NEUTRAL",
+            "reasoning": "your analysis here"
+        }}
+        
+        你必須使用以上確切的JSON格式回答，不要加入任何其他文字。
         """
         
-        response = self.llm.invoke([HumanMessage(content=prompt)])
-        analysis = json.loads(response.content)
-        
-        return {
-            "sentiment": MarketSentiment(analysis["sentiment"].lower()),
-            "thoughts": [ThoughtProcess(
-                thought=f"Initial analysis: {analysis['reasoning']}"
-            )]
-        }
+        try:
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            # Clean the response content to ensure it only contains the JSON part
+            content = response.content.strip()
+            # Remove any markdown code block markers if present
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            analysis = json.loads(content)
+            
+            # Validate required fields
+            if "sentiment" not in analysis or "reasoning" not in analysis:
+                raise ValueError("Missing required fields in response")
+                
+            # Default to NEUTRAL if sentiment is invalid
+            try:
+                sentiment = MarketSentiment(analysis["sentiment"].lower())
+            except ValueError:
+                sentiment = MarketSentiment.NEUTRAL
+                
+            return {
+                "sentiment": sentiment,
+                "thoughts": [ThoughtProcess(
+                    thought=f"Initial analysis: {analysis['reasoning']}"
+                )]
+            }
+            
+        except json.JSONDecodeError as e:
+            # If JSON parsing fails, return a neutral sentiment with error info
+            return {
+                "sentiment": MarketSentiment.NEUTRAL,
+                "thoughts": [ThoughtProcess(
+                    thought=f"Error parsing market analysis. Defaulting to neutral sentiment. Error: {str(e)}"
+                )]
+            }
+        except Exception as e:
+            # Handle any other unexpected errors
+            return {
+                "sentiment": MarketSentiment.NEUTRAL,
+                "thoughts": [ThoughtProcess(
+                    thought=f"Unexpected error during analysis. Defaulting to neutral sentiment. Error: {str(e)}"
+                )]
+            }
 
     def _think(self, state: MarketState) -> Dict:
         """進行思考並決定是否需要額外資訊"""
@@ -107,37 +150,85 @@ class ReActMarketAgent:
         
         請思考是否需要額外資訊？如果需要，請說明需要什麼資訊。
         
-        請以 JSON 格式回答：
-        1. thought: 思考過程
-        2. need_action: 是否需要獲取更多資訊 (true/false)
-        3. action: 如果需要行動，指定要獲取的資訊類型 ("price", "volume", "technical")
-        4. symbols: 相關的股票代碼列表
+        請以下列格式回答：
+        {{
+            "thought": "思考過程",
+            "need_action": true/false,
+            "action": "price/volume/technical",
+            "symbols": ["股票代碼1", "股票代碼2"]
+        }}
+        
+        你必須使用以上確切的JSON格式回答，不要加入任何其他文字。
         """
         
-        response = self.llm.invoke([HumanMessage(content=prompt)])
-        thinking = json.loads(response.content)
-        
-        new_thought = ThoughtProcess(
-            thought=thinking["thought"],
-            action=thinking.get("action"),
-            action_input={"symbols": thinking.get("symbols", [])} if thinking["need_action"] else None
-        )
-        
-        # 如果需要行動，執行相應的資料獲取
-        if thinking["need_action"]:
-            if thinking["action"] == "price":
-                data = self._fetch_price_data(thinking["symbols"])
-            elif thinking["action"] == "technical":
-                data = self._fetch_technical_indicators(thinking["symbols"])
-            else:
-                data = self._fetch_volume_data(thinking["symbols"])
+        try:
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            # Clean the response content
+            content = response.content.strip()
+            # Remove any markdown code block markers if present
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
             
-            new_thought.observation = str(data)
-            state["context"].update({thinking["action"]: data})
-        
-        return {
-            "thoughts": state["thoughts"] + [new_thought]
-        }
+            thinking = json.loads(content)
+            
+            # Validate required fields
+            if "thought" not in thinking:
+                raise ValueError("Missing required 'thought' field in response")
+            if "need_action" not in thinking:
+                raise ValueError("Missing required 'need_action' field in response")
+                
+            # Create new thought process
+            new_thought = ThoughtProcess(
+                thought=thinking["thought"],
+                action=thinking.get("action") if thinking.get("need_action") else None,
+                action_input={"symbols": thinking.get("symbols", [])} if thinking.get("need_action") else None
+            )
+            
+            # If action is needed, validate action type
+            if thinking.get("need_action"):
+                if "action" not in thinking:
+                    raise ValueError("Action required but 'action' field missing")
+                if thinking["action"] not in ["price", "volume", "technical"]:
+                    raise ValueError(f"Invalid action type: {thinking['action']}")
+                if "symbols" not in thinking or not thinking["symbols"]:
+                    raise ValueError("Action requires symbols but none provided")
+                
+                # Execute the appropriate action
+                if thinking["action"] == "price":
+                    data = self._fetch_price_data(thinking["symbols"])
+                elif thinking["action"] == "technical":
+                    data = self._fetch_technical_indicators(thinking["symbols"])
+                else:  # volume
+                    data = self._fetch_volume_data(thinking["symbols"])
+                
+                new_thought.observation = str(data)
+                state["context"].update({thinking["action"]: data})
+            
+            return {
+                "thoughts": state["thoughts"] + [new_thought]
+            }
+            
+        except json.JSONDecodeError as e:
+            # If JSON parsing fails, return a generic thought
+            new_thought = ThoughtProcess(
+                thought="Error parsing thinking process. Will proceed with available information.",
+            )
+            return {
+                "thoughts": state["thoughts"] + [new_thought]
+            }
+        except Exception as e:
+            # Handle any other unexpected errors
+            new_thought = ThoughtProcess(
+                thought=f"Unexpected error during thinking process: {str(e)}. Will proceed with available information.",
+            )
+            return {
+                "thoughts": state["thoughts"] + [new_thought]
+            }
 
     def _make_decision(self, state: MarketState) -> Dict:
         """基於所有資訊作出最終決策"""
