@@ -1,7 +1,7 @@
 import re
 import pandas as pd
 
-from typing import List, Annotated
+from typing import List, Annotated, Optional
 from typing_extensions import TypedDict
 from langchain_core.messages import HumanMessage
 from langchain_ollama import ChatOllama
@@ -86,38 +86,63 @@ def summarize(state: State):
     summary = processor.generate_summary(segments)
     return {"summary": summary, "messages": [HumanMessage(content=summary)]}
 
-# 建立工作流程圖
-graph_builder = StateGraph(State)
+class TranscriptAgent:
+    def __init__(self, model_name: str = "llama2:3b"):
+        self.llm = ChatOllama(model=model_name)
+        self.processor = TranscriptProcessor(self.llm)
+        self.chain = self._build_chain()
+    
+    def _build_chain(self):
+        """建立並返回工作流程"""
+        # 建立工作流程圖
+        graph_builder = StateGraph(State)
 
-# 添加節點
-graph_builder.add_node("preprocess", preprocess)
-graph_builder.add_node("split", split_text) 
-graph_builder.add_node("summarize", summarize)
+        # 添加節點
+        graph_builder.add_node("preprocess", preprocess)
+        graph_builder.add_node("split", split_text) 
+        graph_builder.add_node("summarize", summarize)
 
-# 設定節點關係
-graph_builder.add_edge(START, "preprocess")
-graph_builder.add_edge("preprocess", "split")
-graph_builder.add_edge("split", "summarize")
-graph_builder.add_edge("summarize", END)
+        # 設定節點關係
+        graph_builder.add_edge(START, "preprocess")
+        graph_builder.add_edge("preprocess", "split")
+        graph_builder.add_edge("split", "summarize")
+        graph_builder.add_edge("summarize", END)
 
-# 編譯工作流程
-chain = graph_builder.compile()
+        # 編譯工作流程
+        return graph_builder.compile()
 
-# 讀取 CSV 檔案
-df = pd.read_csv('../transcripts_video_v1.1.csv')
+    def process_transcript(self, transcript: str) -> dict:
+        """處理單一逐字稿"""
+        return self.chain.invoke({
+            "transcript": transcript,
+            "messages": [],
+            "processed_text": "",
+            "segments": [],
+            "summary": ""
+        })
 
-# 處理第一個逐字稿作為示例
-sample_transcript = df['transcript'].iloc[0]
+    def process_batch(self, transcripts: List[str]) -> List[dict]:
+        """批次處理多個逐字稿"""
+        return [self.process_transcript(t) for t in transcripts]
 
-# 執行工作流程
-result = chain.invoke({
-    "transcript": sample_transcript,
-    "messages": [],
-    "processed_text": "",
-    "segments": [],
-    "summary": ""
-})
+    def get_chain(self):
+        """返回編譯好的工作流程"""
+        return self.chain
 
-print("\n最終摘要:")
-print("-" * 50)
-print(result["summary"])
+# 範例使用
+if __name__ == "__main__":
+    # 初始化 agent
+    agent = TranscriptAgent()
+    
+    # 讀取 CSV 檔案
+    df = pd.read_csv('../transcripts_video_v1.1.csv')
+    
+    # 處理第一個逐字稿作為示例
+    sample_transcript = df['transcript'].iloc[0]
+    
+    # 執行工作流程
+    result = agent.process_transcript(sample_transcript)
+    
+    print("\n最終摘要:")
+    print("-" * 50)
+    print(result["summary"])
