@@ -1,75 +1,186 @@
-# Agent 架構設計：投資決策系統
+# Agents4Financial
 
-本文提出一套較為綜合且模組化的 agent 架構，用來將每天由 YouTube 直播影片轉成逐字稿後進行投資決策。該架構結合 LangChain 中常見的 **Plan-and-Execute** 或 **ReAct** 模型，使 agent 能夠在多步推理過程中動態呼叫外部工具，進而提升決策精確性與透明度。
+A comprehensive financial analysis system that leverages AI agents to process daily financial video transcripts and generate investment insights.
 
----
+## Project Overview
 
-## 1. 架構總覽
+This project implements an advanced AI-driven financial analysis system that:
+- Processes YouTube financial video transcripts
+- Analyzes market sentiment and trends
+- Generates actionable investment decisions with risk management
+- Integrates multiple data sources for comprehensive market analysis
 
-### 核心思路
-- **逐字稿資訊處理**：接收並解析每日轉換來的逐字稿，進行語意理解與重點抽取，涵蓋金融評論、消息更新、市場情緒等。
-- **多步驟推理與工具調用**：針對逐字稿內容進行進一步思考，決定是否需要查詢外部數據（如即時股價、歷史數據、技術指標等），採用 ReAct 模型進行「思考→動作→觀察」的循環。
-- **計劃與決策生成**：整合前述資訊，生成具有可執行性且包含風險控管措施的投資決策（推薦清單、買賣建議或決策報告）。
+## System Architecture
 
----
+### Workflow Diagram
 
-## 2. 具體模組與流程設計
+```mermaid
+graph TB
+    subgraph TranscriptAgent
+        A[Raw Transcript] --> B[Preprocess]
+        B --> C[Split Text]
+        C --> D[Summarize]
+        D --> E[Summary Output]
+    end
 
-### (1) 文本處理與摘要模組
-- **輸入**：每日由 Whisper 轉出的逐字稿。
-- **處理方式**：
-  - 對逐字稿內容進行分段與標記（例如市場情緒、關鍵數據、專家觀點）。
-  - 使用摘要技術（如 TextRank 或基於 LLM 的摘要方法）壓縮內容，提煉出數個重點。
-- **目的**：為後續的 agent 決策提供高度概括與重點明確的信息基礎。
+    subgraph ReActMarketAgent
+        E --> F[Analyze Market]
+        F --> G[Think]
+        G --> H{Need More Info?}
+        H -->|Yes| I[Fetch Data]
+        I --> G
+        H -->|No| J[Make Decision]
+    end
 
-### (2) 決策推理與 ReAct 模組
-- **模型選擇**：採用 ReAct agent 設計，使 agent 在閱讀摘要後可以「思考」並決定是否調用工具以進一步補充資料。  
-- **工作流程**：
-  1. **初步評估**：agent 閱讀摘要內容，評估市場情緒與可能的投資信號。
-  2. **工具選擇**：根據評估結果，決定是否需要呼叫外部 API（如股票行情、歷史趨勢、技術指標等）。
-  3. **反饋循環**：agent 根據調用結果進行進一步的思考和決策，持續進行多步推理直到決策收斂。
-- **優點**：此模型在透明呈現思考過程的同時，能夠根據需要動態調用不同工具，使得決策過程更為穩健。
+    subgraph DecisionAgent
+        J --> K[Risk Assessment]
+        K --> L[Generate Strategy]
+        L --> M[Position Sizing]
+        M --> N[Final Decision]
+    end
 
-### (3) 工具調用與數據整合模組
-- **外部工具**：可包括即時行情查詢、技術指標計算工具、情緒分析工具等。
-- **整合方法**：agent 在 ReAct 模型下動態呼叫所需工具，並將返回數據與逐字稿摘要資訊整合，形成更完整的市場觀察與投資假設。
-- **擴展性**：此模組設計保持接口靈活性，方便後續新增其他數據來源或分析工具。
+    subgraph Data Sources
+        O[(Market Data)] --> I
+        P[(Technical Indicators)] --> I
+        Q[(Fundamentals)] --> I
+    end
 
-### (4) 投資決策生成與風險控管模組
-- **決策生成**：在整合所有資訊後，agent 最終給出具體投資決策（如推薦股票、買賣方向、持倉比例等）。
-- **風險評估**：內建基本風險管理規則或獨立風險檢查流程，避免因單一信息影響而造成過大風險。
-- **輸出格式**：建議生成決策報告，包含決策依據、參考數據及主要推理步驟，便於後續檢查和驗證投資績效。
+    subgraph Risk Management
+        R[Risk Level] --> K
+        S[Position Limits] --> M
+        T[Stop Loss] --> L
+    end
 
----
+    classDef primary fill:#e1f5fe,stroke:#01579b
+    classDef secondary fill:#f3e5f5,stroke:#4a148c
+    classDef data fill:#efebe9,stroke:#3e2723
+    classDef decision fill:#ffebee,stroke:#b71c1c
 
-## 3. 為何選擇此架構？
+    class A,B,C,D,E primary
+    class F,G,H,I,J secondary
+    class K,L,M,N decision
+    class O,P,Q data
+    class R,S,T data
+```
 
-- **多工具協同作用**：投資決策需要整合多方資訊，Plan-and-Execute 或 ReAct 架構能夠靈活調用各種工具，逐步細化決策過程。
-- **可解釋性**：ReAct agent 能夠清晰呈現整個決策推理的過程，便於在績效不佳時追蹤和調整決策路徑。
-- **擴展性強**：模組化設計使得未來能夠輕鬆新增其他數據來源（如社交媒體情緒、其他市場指標等），無需重構系統。
+### 1. Transcript Processing (transcript_node.py)
+- Processes raw transcripts from financial videos
+- Performs intelligent text segmentation and summarization
+- Extracts key market insights and sentiment indicators
+- Utilizes LangChain and Ollama for natural language processing
 
----
+### 2. Market Analysis (market_node.py)
+- Implements ReAct (Reasoning + Action) architecture for market analysis
+- Processes market data through a multi-stage pipeline:
+  - Analysis → Thinking → Decision
+- Integrates with external data sources (yfinance, technical indicators)
+- Provides dynamic market sentiment assessment
 
-## 4. 投資績效評估
+### 3. Decision Making (decision_node.py)
+- Generates investment decisions based on analyzed data
+- Implements comprehensive risk management
+- Produces detailed investment reports with:
+  - Technical analysis
+  - Fundamental metrics
+  - Risk assessments
+  - Position sizing recommendations
 
-投資績效最終依賴以下幾點：
-- **逐字稿抽取的準確性與完整性**：直播內容是否能有效捕捉市場動態和專家觀點。
-- **外部數據的準確性**：即時行情、歷史數據及技術指標的可靠程度。
-- **推理過程的穩健性**：多步推理是否充分考慮市場風險與不確定性。
-- **風險管理策略**：最終決策是否在追求收益的同時有效管控風險。
+### 4. Integrated Analysis (integrated_analyzer.py)
+- Combines all components into a unified analysis pipeline
+- Provides historical data analysis capabilities
+- Generates comprehensive market reports
+- Implements sentiment tracking and trend analysis
 
-可透過模擬交易或回測等方法，對 agent 所提出的投資決策進行歷史績效評估，並根據結果調整模型權重或規則。
+## Key Features
 
----
+- 🤖 AI-Powered Analysis: Utilizes advanced LLM models for market analysis
+- 📈 Technical Analysis: Integrates multiple technical indicators
+- 📊 Fundamental Analysis: Processes company fundamentals and macro indicators
+- 🎯 Risk Management: Built-in risk assessment and position sizing
+- 📝 Detailed Reporting: Generates comprehensive investment reports
+- 🔄 Historical Analysis: Supports historical data processing and backtesting
 
-## 結論
+## Prerequisites
 
-綜合以上設計，推薦採用 **ReAct**（或類似 Plan-and-Execute）的 agent 架構：
+- Python 3.10+
+- Required packages (install via pip):
+  - langchain
+  - langchain-ollama
+  - opencc
+  - pandas
+  - yfinance
+  - ta-lib
+  - numpy
 
-- **資料預處理與摘要提煉**：將由 Whisper 轉換的逐字稿中提取出重要金融信息。
-- **推理及動作循環**：利用 ReAct 模型，結合多步思考和外部工具調用（行情查詢、指標計算、風險檢查）。
-- **決策生成與回顧**：最終輸出投資決策報告，並內嵌風險管理檢查機制。
+## Setup
 
-此設計既靈活又結構清晰，非常適合應對高頻、資訊量龐大的逐字稿處理需求，並在決策過程中實現數據融合與動態調整，從而提升最終投資績效。
+1. Clone the repository:
+\`\`\`bash
+git clone https://github.com/yourusername/Agents4Financial.git
+cd Agents4Financial
+\`\`\`
 
-可參考 [LangChain 官網](https://langchain-ai.github.io/langgraph/tutorials/#agent-architectures) 上有關 agent architectures 的說明，並根據實際需求微調各模組，搭建出屬於自己的智能投資決策系統。
+2. Install dependencies:
+\`\`\`bash
+pip install -r requirements.txt
+\`\`\`
+
+3. Configure the Ollama model in constant.py:
+\`\`\`python
+model_name = "gemma3:27b"  # or your preferred model
+\`\`\`
+
+## Usage
+
+### Basic Usage
+\`\`\`python
+from Agentic_AI.integrated_analyzer import IntegratedMarketAnalyzer
+
+# Initialize analyzer
+analyzer = IntegratedMarketAnalyzer()
+
+# Analyze a transcript
+result = analyzer.analyze_transcript(transcript_text)
+
+# Generate report
+report = analyzer.generate_report(result)
+print(report)
+\`\`\`
+
+### Historical Analysis
+\`\`\`python
+# Analyze historical data up to a specific date
+historical_result = analyzer.analyze_with_history("2024/04/14")
+\`\`\`
+
+## Data Structure
+
+The system uses a modular architecture with several key components:
+
+- **TranscriptAgent**: Processes and summarizes financial transcripts
+- **ReActMarketAgent**: Analyzes market conditions using ReAct architecture
+- **DecisionAgent**: Generates investment decisions with risk management
+- **IntegratedMarketAnalyzer**: Combines all components for comprehensive analysis
+
+## Output Format
+
+The system generates structured analysis results including:
+
+- Market sentiment analysis
+- Trading signals and recommendations
+- Risk assessments
+- Position sizing recommendations
+- Technical and fundamental indicators
+- Historical trend analysis
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

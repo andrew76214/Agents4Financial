@@ -23,6 +23,10 @@ class MarketContext:
     market_sentiment: str
     key_indices: Dict[str, float]
     macro_indicators: Dict[str, Any]
+    trading_volume: Dict[str, Any] = None
+    market_keywords: List[str] = None
+    time_series_data: Dict[str, List[float]] = None
+    global_correlations: Dict[str, float] = None
 
 @dataclass
 class StockAnalysis:
