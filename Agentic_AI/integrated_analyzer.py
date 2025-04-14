@@ -400,12 +400,23 @@ class IntegratedMarketAnalyzer:
         
         # 基於個股分析的信號
         for stock in stock_analyses:
-            if stock.target_price and stock.current_price:
-                upside = (stock.target_price - stock.current_price) / stock.current_price
-                if upside > 0.2:  # 上漲空間超過20%
-                    signals.append(f"{stock.symbol}: 預期上漲空間{upside*100:.1f}%, 建議買進")
-                elif upside < -0.1:  # 下跌風險超過10%
-                    signals.append(f"{stock.symbol}: 預期下跌風險{-upside*100:.1f}%, 建議減持")
+            if stock.current_price:
+                # 技術面信號
+                rsi = stock.technical_indicators.get("RSI", 50)
+                if rsi < 30:
+                    signals.append(f"{stock.symbol}: RSI顯示超賣({rsi:.1f}), 可能存在反彈機會")
+                elif rsi > 70:
+                    signals.append(f"{stock.symbol}: RSI顯示超買({rsi:.1f}), 注意回檔風險")
+                
+                # 基本面信號
+                pe = stock.fundamental_metrics.get("PE")
+                if pe and pe < 15:
+                    signals.append(f"{stock.symbol}: 本益比({pe:.1f})低於產業平均, 具有價值投資機會")
+                
+                # 風險提示
+                if stock.risk_factors:
+                    risk_str = "、".join(stock.risk_factors[:2])  # 只顯示前兩個風險因素
+                    signals.append(f"{stock.symbol}: 需注意風險 - {risk_str}")
         
         return signals
 
@@ -423,10 +434,18 @@ class IntegratedMarketAnalyzer:
         
         # 評估總體經濟風險
         if market_context.macro_indicators:
-            for indicator, value in market_context.macro_indicators.items():
-                if isinstance(value, str) and "risk" in value.lower():
-                    risk_factors.append(f"{indicator}顯示風險提升")
-                    risk_level = "中高" if risk_level != "高" else "高"
+            if isinstance(market_context.macro_indicators, dict):
+                # Handle dictionary type
+                for indicator, value in market_context.macro_indicators.items():
+                    if isinstance(value, str) and "risk" in value.lower():
+                        risk_factors.append(f"{indicator}顯示風險提升")
+                        risk_level = "中高" if risk_level != "高" else "高"
+            else:
+                # Handle list type
+                for indicator in market_context.macro_indicators:
+                    if isinstance(indicator, str) and "risk" in indicator.lower():
+                        risk_factors.append(f"{indicator}顯示風險提升")
+                        risk_level = "中高" if risk_level != "高" else "高"
         
         # 評估個股風險
         stock_risks = []
