@@ -33,22 +33,29 @@ graph TB
     end
 
     subgraph DecisionAgent
-        J --> K[Risk Assessment]
-        K --> L[Generate Strategy]
-        L --> M[Position Sizing]
-        M --> N[Final Decision]
+        J --> K[Initial Analysis]
+        K --> L[Think]
+        L --> M{Need Details?}
+        M -->|Yes| N[Analyze Aspects]
+        N --> L
+        M -->|No| O[Risk Assessment]
+        O --> P[Generate Strategy]
+        P --> Q[Final Decision]
     end
 
     subgraph Data Sources
-        O[(Market Data)] --> I
-        P[(Technical Indicators)] --> I
-        Q[(Fundamentals)] --> I
+        R[(Market Data)] --> I
+        R --> N
+        S[(Technical Indicators)] --> I
+        S --> N
+        T[(Fundamentals)] --> I
+        T --> N
     end
 
     subgraph Risk Management
-        R[Risk Level] --> K
-        S[Position Limits] --> M
-        T[Stop Loss] --> L
+        U[Risk Level] --> O
+        V[Position Limits] --> P
+        W[Stop Loss] --> P
     end
 
     classDef primary fill:#e1f5fe,stroke:#01579b
@@ -58,9 +65,9 @@ graph TB
 
     class A,B,C,D,E primary
     class F,G,H,I,J secondary
-    class K,L,M,N decision
-    class O,P,Q data
+    class K,L,M,N,O,P,Q decision
     class R,S,T data
+    class U,V,W data
 ```
 
 ### 1. Transcript Processing (transcript_node.py)
@@ -77,13 +84,21 @@ graph TB
 - Provides dynamic market sentiment assessment
 
 ### 3. Decision Making (decision_node.py)
-- Generates investment decisions based on analyzed data
+- Implements ReAct (Reasoning + Action) architecture for decision making
+- Features advanced reflection and self-improvement capabilities:
+  - Analyze → Think → Decide workflow
+  - Multi-stage thinking process with data gathering
+  - Detailed reasoning and observation tracking
+- Provides two decision generation modes:
+  - Standard mode: Direct analysis and decision
+  - Reflection mode: Deep thinking with multiple analysis cycles
 - Implements comprehensive risk management
 - Produces detailed investment reports with:
   - Technical analysis
   - Fundamental metrics
   - Risk assessments
   - Position sizing recommendations
+  - Full reasoning trace
 
 ### 4. Integrated Analysis (integrated_analyzer.py)
 - Combines all components into a unified analysis pipeline
@@ -135,15 +150,20 @@ model_name = "gemma3:27b"  # or your preferred model
 ### Basic Usage
 \`\`\`python
 from Agentic_AI.integrated_analyzer import IntegratedMarketAnalyzer
+from Agentic_AI.decision_node import DecisionAgent
 
-# Initialize analyzer
+# Initialize analyzer and decision agent
 analyzer = IntegratedMarketAnalyzer()
+decision_agent = DecisionAgent()
 
-# Analyze a transcript
-result = analyzer.analyze_transcript(transcript_text)
+# Standard decision making
+decision = decision_agent.generate_decision(stock_analysis, market_context)
 
-# Generate report
-report = analyzer.generate_report(result)
+# Advanced decision making with reflection
+reflective_decision = decision_agent.generate_decision_with_reflection(stock_analysis, market_context)
+
+# Generate detailed report
+report = decision_agent.generate_report(reflective_decision)
 print(report)
 \`\`\`
 
