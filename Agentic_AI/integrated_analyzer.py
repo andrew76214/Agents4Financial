@@ -93,7 +93,7 @@ class MarketSentimentAnalyzer:
 class IntegratedMarketAnalyzer:
     """Integrated system combining transcript analysis and market decisions"""
     
-    def __init__(self, model_name=model_name, max_iterations=25):
+    def __init__(self, model_name=model_name, max_iterations=24):
         self.llm = ChatOllama(model=model_name)
         self.transcript_agent = TranscriptAgent(model_name)
         self.market_agent = ReActMarketAgent(model_name)

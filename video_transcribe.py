@@ -3,6 +3,17 @@ import csv
 import whisper
 import opencc
 import re
+import torch
+
+def set_gpu_device():
+    """
+    設定使用 RTX 3060 (device index 1) 作為運算裝置
+    """
+    if torch.cuda.is_available():
+        torch.cuda.set_device(1)  # 使用 RTX 3060
+        print(f"使用 GPU: {torch.cuda.get_device_name()}")
+    else:
+        print("無法使用 GPU，將使用 CPU 進行運算")
 
 def get_date_from_filename(fn):
     """
@@ -24,6 +35,9 @@ def transcribe_video(model, video_path, converter):
     return traditional_text
 
 def main():
+    # 設定使用 RTX 3060
+    set_gpu_device()
+    
     video_dir = "gooaye"            # 存放影片的資料夾
     output_csv = "transcripts_video_gooaye_v1.0.csv"   # 輸出 CSV 檔案
 
