@@ -1,1 +1,1 @@
-model_name: str = "deepseek-r1:32b"
+model_name: str = "deepseek-r1:70b"

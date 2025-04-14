@@ -2,6 +2,7 @@ from typing import List, Dict, Any
 from dataclasses import dataclass
 import pandas as pd
 import json
+import re
 from langchain_ollama import ChatOllama
 from IPython.display import Image, display
 
@@ -24,6 +25,71 @@ class AnalysisResult:
     risk_assessment: Dict[str, Any]
     final_decision: Dict[str, Any]
 
+class MarketSentimentAnalyzer:
+    """市場情緒分析器"""
+    
+    def __init__(self):
+        self.sentiment_keywords = {
+            'positive': ['樂觀', '上漲', '反彈', '利多', '看好', '突破', '創新高'],
+            'negative': ['悲觀', '下跌', '重挫', '利空', '看淡', '跌破', '創新低'],
+            'neutral': ['震盪', '盤整', '觀望', '持平']
+        }
+        
+    def analyze_sentiment(self, text: str) -> Dict[str, float]:
+        """分析文本中的市場情緒
+        
+        Returns:
+            Dict with sentiment scores (positive, negative, neutral)
+        """
+        word_count = len(text.split())
+        sentiment_scores = {
+            'positive': 0.0,
+            'negative': 0.0,
+            'neutral': 0.0
+        }
+        
+        # 計算每種情緒的出現頻率
+        for sentiment, keywords in self.sentiment_keywords.items():
+            count = sum(text.count(keyword) for keyword in keywords)
+            sentiment_scores[sentiment] = count / word_count
+            
+        # 標準化分數
+        total = sum(sentiment_scores.values())
+        if total > 0:
+            for key in sentiment_scores:
+                sentiment_scores[key] /= total
+                
+        return sentiment_scores
+        
+    def get_market_phase(self, sentiment_scores: Dict[str, float]) -> str:
+        """根據情緒分數判斷市場階段"""
+        if sentiment_scores['positive'] > 0.5:
+            return '多頭市場'
+        elif sentiment_scores['negative'] > 0.5:
+            return '空頭市場'
+        elif sentiment_scores['neutral'] > 0.4:
+            return '盤整市場'
+        else:
+            return '轉折階段'
+            
+    def analyze_vix_impact(self, text: str) -> float:
+        """分析VIX指數對市場情緒的影響"""
+        vix_pattern = r"VIX.*?(\d+)"
+        matches = re.findall(vix_pattern, text)
+        
+        if matches:
+            vix_values = [float(v) for v in matches]
+            avg_vix = sum(vix_values) / len(vix_values)
+            
+            # VIX > 30 通常表示高度恐慌
+            if avg_vix > 30:
+                return -0.8
+            # VIX < 20 通常表示市場平穩
+            elif avg_vix < 20:
+                return 0.2
+                
+        return 0.0
+
 class IntegratedMarketAnalyzer:
     """Integrated system combining transcript analysis and market decisions"""
     
@@ -33,9 +99,12 @@ class IntegratedMarketAnalyzer:
         self.market_agent = ReActMarketAgent(model_name)
         self.max_iterations = max_iterations
         self.historical_decisions = {}  # Store historical decisions
+        self.history_window = 90  # 分析歷史數據的天數窗口
+        self.min_confidence = 0.6  # 最小信心水平
+        self.trading_signals = []  # 儲存交易信號
         
     def extract_market_context(self, summary: str) -> MarketContext:
-        """Extract market context from transcript summary"""
+        """從摘要中提取市場背景資訊"""
         prompt = f"""
         From the following market summary, please extract key market information:
         
@@ -71,11 +140,84 @@ class IntegratedMarketAnalyzer:
                 "macro_indicators": {}
             }
         
+        sentiment = context_data["market_sentiment"]
+        indices = context_data.get("key_indices", {})
+        macro = context_data.get("macro_indicators", {})
+        volume = context_data.get("trading_volume", {})
+        
+        # 新增: 分析市場關鍵字
+        keywords = self._extract_market_keywords(summary)
+        
+        # 新增: 處理時間序列資料
+        time_series = self._process_time_series(summary)
+        
+        # 新增: 分析全球市場關聯性
+        global_correlations = self._analyze_global_markets(summary)
+        
         return MarketContext(
-            market_sentiment=context_data["market_sentiment"],
-            key_indices=context_data.get("key_indices", {}),
-            macro_indicators=context_data.get("macro_indicators", {})
+            market_sentiment=sentiment,
+            key_indices=indices,
+            macro_indicators=macro,
+            trading_volume=volume,
+            market_keywords=keywords,
+            time_series_data=time_series,
+            global_correlations=global_correlations
         )
+
+    def _extract_market_keywords(self, text: str) -> List[str]:
+        """提取市場關鍵字和主題"""
+        keywords = []
+        
+        # 搜索常見市場主題
+        market_themes = [
+            "關稅戰", "貿易衝突", "政策不確定性",
+            "供應鏈轉移", "通膨", "升息",
+            "經濟衰退", "技術性衰退", "外部衝擊"
+        ]
+        
+        for theme in market_themes:
+            if theme in text:
+                keywords.append(theme)
+        
+        return keywords
+
+    def _process_time_series(self, text: str) -> Dict[str, List[float]]:
+        """處理時間序列數據"""
+        series_data = {}
+        
+        # 解析數字序列
+        number_pattern = r"(\d+\.?\d*%?)"
+        matches = re.finditer(number_pattern, text)
+        
+        current_series = []
+        for match in matches:
+            value = match.group(1)
+            if "%" in value:
+                value = float(value.replace("%", "")) / 100
+            else:
+                value = float(value)
+            current_series.append(value)
+            
+        if current_series:
+            series_data["raw_series"] = current_series
+            
+        return series_data
+
+    def _analyze_global_markets(self, text: str) -> Dict[str, float]:
+        """分析全球市場關聯性"""
+        correlations = {}
+        
+        # 主要市場指數
+        markets = ["美股", "歐股", "日股", "陸股", "臺股"]
+        
+        # 計算相關性
+        for market in markets:
+            if market in text:
+                # 簡單的相關性評分 (0-1)
+                score = len(re.findall(market, text)) / len(text.split())
+                correlations[market] = min(score * 100, 1.0)
+                
+        return correlations
     
     def extract_stock_analysis(self, summary: str) -> List[StockAnalysis]:
         """Extract stock-specific information from transcript summary"""
@@ -124,18 +266,18 @@ class IntegratedMarketAnalyzer:
         ]
     
     def analyze_transcript(self, transcript: str) -> AnalysisResult:
-        """Perform complete analysis from transcript to investment decision"""
+        """執行完整的分析流程,從講稿到投資決策"""
         iteration_count = 0
         
         print("\n=== 開始分析 ===")
         
-        # Step 1: Process transcript and get summary
+        # Step 1: 處理講稿並生成摘要
         print("\n1. 處理文字稿並生成摘要...")
         transcript_result = self.transcript_agent.process_transcript(transcript)
         summary = transcript_result["summary"]
         print(f"摘要完成: {summary}")
         
-        # Step 2: Extract market context and stock information
+        # Step 2: 提取市場情緒和股票資訊
         print("\n2. 提取市場背景資訊...")
         market_context = self.extract_market_context(summary)
         print(f"市場情緒: {market_context.market_sentiment}")
@@ -143,6 +285,23 @@ class IntegratedMarketAnalyzer:
         print("\n3. 分析個股資訊...")
         stock_analyses = self.extract_stock_analysis(summary)
         print(f"找到 {len(stock_analyses)} 支股票進行分析")
+        
+        # 新增: 計算市場信心指標
+        confidence_score = self._calculate_confidence_score(market_context, stock_analyses)
+        
+        # 新增: 生成交易信號
+        trading_signals = self._generate_trading_signals(
+            market_context,
+            stock_analyses,
+            confidence_score
+        )
+        
+        # 新增: 風險評估
+        risk_assessment = self._assess_risk(
+            market_context,
+            stock_analyses,
+            confidence_score
+        )
         
         # Step 3: Generate market decisions using the market agent
         print("\n4. 生成市場決策...")
@@ -168,8 +327,6 @@ class IntegratedMarketAnalyzer:
             
         # Step 4: Compile final analysis result
         print("\n6. 整合分析結果...")
-        trading_signals = self._extract_trading_signals(summary)
-        risk_assessment = self._assess_overall_risk(market_context, stock_analyses)
         
         print("\n7. 生成最終決策...")
         final_result = AnalysisResult(
@@ -192,11 +349,97 @@ class IntegratedMarketAnalyzer:
                 for d in decisions
             ],
             risk_assessment=risk_assessment,
-            final_decision=self._make_final_decision(decisions, market_context)
+            final_decision=self._make_final_decision(decisions, market_context),
+            confidence_score=confidence_score
         )
         
         print("\n=== 分析完成 ===\n")
         return final_result
+    
+    def _calculate_confidence_score(self, market_context: MarketContext,
+                                stock_analyses: List[StockAnalysis]) -> float:
+        """計算市場信心指標"""
+        # 根據市場情緒賦予基礎分數
+        base_score = {
+            "bullish": 0.8,
+            "neutral": 0.5,
+            "bearish": 0.2
+        }.get(market_context.market_sentiment.lower(), 0.5)
+        
+        # 考慮技術指標
+        if market_context.key_indices:
+            technical_score = sum(
+                1 for v in market_context.key_indices.values() 
+                if isinstance(v, (int, float)) and v > 0
+            ) / len(market_context.key_indices)
+        else:
+            technical_score = 0.5
+            
+        # 考慮宏觀指標
+        macro_score = len(market_context.macro_indicators) > 0
+        
+        # 綜合評分
+        confidence = (base_score * 0.5 + 
+                     technical_score * 0.3 +
+                     macro_score * 0.2)
+                     
+        return min(max(confidence, 0), 1)  # 確保在0-1之間
+
+    def _generate_trading_signals(self, market_context: MarketContext,
+                              stock_analyses: List[StockAnalysis],
+                              confidence: float) -> List[str]:
+        """生成交易信號"""
+        signals = []
+        
+        # 基於市場情緒的信號
+        if confidence > self.min_confidence:
+            if market_context.market_sentiment.lower() == "bullish":
+                signals.append("市場氣氛看漲,可考慮逢低買進")
+            elif market_context.market_sentiment.lower() == "bearish":
+                signals.append("市場氣氛看空,建議減持部位")
+        
+        # 基於個股分析的信號
+        for stock in stock_analyses:
+            if stock.target_price and stock.current_price:
+                upside = (stock.target_price - stock.current_price) / stock.current_price
+                if upside > 0.2:  # 上漲空間超過20%
+                    signals.append(f"{stock.symbol}: 預期上漲空間{upside*100:.1f}%, 建議買進")
+                elif upside < -0.1:  # 下跌風險超過10%
+                    signals.append(f"{stock.symbol}: 預期下跌風險{-upside*100:.1f}%, 建議減持")
+        
+        return signals
+
+    def _assess_risk(self, market_context: MarketContext,
+                   stock_analyses: List[StockAnalysis],
+                   confidence: float) -> Dict[str, Any]:
+        """評估整體風險"""
+        risk_factors = []
+        risk_level = "低"
+        
+        # 評估市場風險
+        if market_context.market_sentiment.lower() == "bearish":
+            risk_factors.append("市場情緒偏空")
+            risk_level = "高"
+        
+        # 評估總體經濟風險
+        if market_context.macro_indicators:
+            for indicator, value in market_context.macro_indicators.items():
+                if isinstance(value, str) and "risk" in value.lower():
+                    risk_factors.append(f"{indicator}顯示風險提升")
+                    risk_level = "中高" if risk_level != "高" else "高"
+        
+        # 評估個股風險
+        stock_risks = []
+        for stock in stock_analyses:
+            if hasattr(stock, "risk_factors") and stock.risk_factors:
+                stock_risks.extend(stock.risk_factors)
+        
+        return {
+            "risk_level": risk_level,
+            "market_risks": risk_factors,
+            "stock_specific_risks": stock_risks,
+            "confidence_score": confidence
+        }
     
     def _extract_trading_signals(self, summary: str) -> List[str]:
         """Extract trading signals from summary"""
