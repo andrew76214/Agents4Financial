@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, TypedDict
 from dataclasses import dataclass
 from enum import Enum
 import json
@@ -6,6 +6,8 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 from langchain_ollama import ChatOllama
+from langchain_core.messages import HumanMessage
+from langgraph.graph import StateGraph, END, START
 
 class DecisionType(Enum):
     BUY = "買入"
@@ -56,6 +58,23 @@ class InvestmentDecision:
     reasoning: List[str]
     supporting_data: Dict[str, Any]
 
+@dataclass 
+class ThoughtProcess:
+    """思考過程記錄"""
+    thought: str
+    action: Optional[str] = None  
+    action_input: Optional[Dict] = None
+    observation: Optional[str] = None
+
+class DecisionState(TypedDict):
+    """決策狀態"""
+    stock_analysis: Any  # StockAnalysis
+    market_context: Any  # MarketContext
+    sentiment: str  # 市場情緒
+    thoughts: List[ThoughtProcess]  # 思考過程記錄
+    context: Dict[str, Any]  # 額外的分析數據
+    decision: Optional[Any] = None  # 最終決策
+
 class RiskManager:
     """風險管理模組"""
     def __init__(self):
@@ -66,20 +85,24 @@ class RiskManager:
     def assess_risk_level(self, analysis: StockAnalysis, market_context: MarketContext) -> RiskLevel:
         risk_score = 0
         
+        # Handle potential None values
+        technical_indicators = analysis.technical_indicators or {}
+        fundamental_metrics = analysis.fundamental_metrics or {}
+        
         # 技術指標風險評估
-        if analysis.technical_indicators.get("RSI", 50) > 70:
+        if technical_indicators.get("RSI", 50) > 70:
             risk_score += 1
-        if analysis.technical_indicators.get("volatility", 0) > 0.3:
+        if technical_indicators.get("volatility", 0) > 0.3:
             risk_score += 1
             
         # 基本面風險評估
-        if analysis.fundamental_metrics.get("debt_ratio", 0) > 0.7:
+        if fundamental_metrics.get("debt_ratio", 0) > 0.7:
             risk_score += 1
-        if analysis.fundamental_metrics.get("current_ratio", 1) < 1:
+        if fundamental_metrics.get("current_ratio", 1) < 1:
             risk_score += 1
             
         # 市場環境風險評估
-        if market_context.market_sentiment == "bearish":
+        if getattr(market_context, "market_sentiment", "") == "bearish":
             risk_score += 1
         
         if risk_score >= 3:
@@ -103,7 +126,274 @@ class DecisionAgent:
     def __init__(self, model_name: str = "llama2:3b"):
         self.llm = ChatOllama(model=model_name)
         self.risk_manager = RiskManager()
+        self.chain = self._build_chain()
         
+    def _build_chain(self) -> StateGraph:
+        """建立 ReAct 工作流程"""
+        workflow = StateGraph(DecisionState)
+        
+        # 添加節點
+        workflow.add_node("analyze", self._analyze_stock)
+        workflow.add_node("think", self._think)
+        workflow.add_node("decide", self._make_final_decision)
+        
+        # 設定工作流程
+        workflow.add_edge(START, "analyze")
+        workflow.add_edge("analyze", "think")
+        workflow.add_edge("think", "decide")
+        workflow.add_edge("decide", END)
+        
+        # 允許思考-行動循環
+        workflow.add_edge("think", "think")
+        
+        return workflow.compile()
+
+    def _analyze_stock(self, state: DecisionState) -> Dict:
+        """分析股票狀態"""
+        analysis = state["stock_analysis"]
+        market = state["market_context"]
+        
+        prompt = f"""請分析以下股票資訊，判斷目前狀態：
+        
+        股票代號: {analysis.symbol}
+        技術指標: {json.dumps(analysis.technical_indicators, ensure_ascii=False)}
+        基本面指標: {json.dumps(analysis.fundamental_metrics, ensure_ascii=False)}
+        風險因素: {json.dumps(analysis.risk_factors, ensure_ascii=False)}
+        市場情緒: {market.market_sentiment}
+        
+        請以下列格式回答：
+        {{
+            "sentiment": "樂觀/中性/悲觀",
+            "reasoning": "分析理由"
+        }}
+        """
+        
+        try:
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            content = response.content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            analysis = json.loads(content)
+            
+            return {
+                "sentiment": analysis["sentiment"],
+                "thoughts": [ThoughtProcess(
+                    thought=f"Initial analysis: {analysis['reasoning']}"
+                )]
+            }
+        except Exception as e:
+            return {
+                "sentiment": "中性",
+                "thoughts": [ThoughtProcess(
+                    thought=f"Error in analysis: {str(e)}. Defaulting to neutral."
+                )]
+            }
+
+    def _think(self, state: DecisionState) -> Dict:
+        """進行思考並決定是否需要額外資訊"""
+        current_context = state["context"]
+        last_thought = state["thoughts"][-1]
+        
+        prompt = f"""基於目前資訊：
+        1. 分析結果: {last_thought.thought}
+        2. 已有數據: {json.dumps(current_context, indent=2, ensure_ascii=False)}
+        
+        請思考是否需要額外資訊？需要什麼資訊？
+        
+        請以下列格式回答：
+        {{
+            "thought": "思考過程",
+            "need_action": true/false,
+            "action": "technical/fundamental/market",
+            "aspect": ["特定指標或面向"]
+        }}
+        """
+        
+        try:
+            response = self.llm.invoke([HumanMessage(content=prompt)])
+            content = response.content.strip()
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            content = content.strip()
+            
+            thinking = json.loads(content)
+            
+            new_thought = ThoughtProcess(
+                thought=thinking["thought"],
+                action=thinking.get("action") if thinking.get("need_action") else None,
+                action_input={"aspects": thinking.get("aspect", [])} if thinking.get("need_action") else None
+            )
+            
+            if thinking.get("need_action"):
+                # 根據請求獲取額外資訊
+                if thinking["action"] == "technical":
+                    data = self._analyze_technical_aspects(state["stock_analysis"], thinking.get("aspect", []))
+                elif thinking["action"] == "fundamental":
+                    data = self._analyze_fundamental_aspects(state["stock_analysis"], thinking.get("aspect", []))
+                else:  # market
+                    data = self._analyze_market_aspects(state["market_context"], thinking.get("aspect", []))
+                
+                new_thought.observation = str(data)
+                state["context"].update({thinking["action"]: data})
+            
+            return {
+                "thoughts": state["thoughts"] + [new_thought]
+            }
+            
+        except Exception as e:
+            new_thought = ThoughtProcess(
+                thought=f"Error in thinking process: {str(e)}. Will proceed with available information."
+            )
+            return {
+                "thoughts": state["thoughts"] + [new_thought]
+            }
+
+    def _make_final_decision(self, state: DecisionState) -> Dict:
+        """基於所有資訊作出最終決策"""
+        all_thoughts = "\n".join(f"- {t.thought}" for t in state["thoughts"])
+        context_data = json.dumps(state["context"], indent=2, ensure_ascii=False)
+        
+        prompt = f"""基於以下資訊，請作出投資決策：
+        
+        市場情緒: {state['sentiment']}
+        思考過程:
+        {all_thoughts}
+        
+        分析數據:
+        {context_data}
+        
+        請提供具體的投資建議，包含:
+        1. 建議操作（買入/賣出/觀望）
+        2. 理由說明
+        3. 風險評估
+        """
+        
+        response = self.llm.invoke([HumanMessage(content=prompt)])
+        
+        # 轉換成正式決策
+        if "買入" in response.content:
+            decision_type = DecisionType.BUY
+        elif "賣出" in response.content:
+            decision_type = DecisionType.SELL
+        else:
+            decision_type = DecisionType.HOLD
+            
+        risk_level = self.risk_manager.assess_risk_level(
+            state["stock_analysis"], 
+            state["market_context"]
+        )
+        
+        strategy = self._generate_position_strategy(
+            state["stock_analysis"],
+            risk_level,
+            decision_type
+        )
+        
+        decision = InvestmentDecision(
+            timestamp=datetime.now(),
+            decision_type=decision_type,
+            risk_level=risk_level,
+            target_symbol=state["stock_analysis"].symbol,
+            strategy=strategy,
+            reasoning=[t.thought for t in state["thoughts"]],
+            supporting_data=state["context"]
+        )
+        
+        return {
+            "decision": decision,
+            "thoughts": state["thoughts"]
+        }
+
+    def _analyze_technical_aspects(self, analysis: StockAnalysis, aspects: List[str]) -> Dict:
+        """分析技術面特定方面"""
+        result = {}
+        for aspect in aspects:
+            if aspect in analysis.technical_indicators:
+                result[aspect] = {
+                    "value": analysis.technical_indicators[aspect],
+                    "interpretation": self._interpret_technical_indicator(aspect, analysis.technical_indicators[aspect])
+                }
+        return result
+    
+    def _analyze_fundamental_aspects(self, analysis: StockAnalysis, aspects: List[str]) -> Dict:
+        """分析基本面特定方面"""
+        result = {}
+        for aspect in aspects:
+            if aspect in analysis.fundamental_metrics:
+                result[aspect] = {
+                    "value": analysis.fundamental_metrics[aspect],
+                    "interpretation": self._interpret_fundamental_metric(aspect, analysis.fundamental_metrics[aspect])
+                }
+        return result
+    
+    def _analyze_market_aspects(self, market_context: MarketContext, aspects: List[str]) -> Dict:
+        """分析市場特定方面"""
+        result = {}
+        for aspect in aspects:
+            if aspect == "sentiment":
+                result[aspect] = market_context.market_sentiment
+            elif aspect in market_context.key_indices:
+                result[aspect] = market_context.key_indices[aspect]
+        return result
+        
+    def _interpret_technical_indicator(self, indicator: str, value: float) -> str:
+        """解釋技術指標含義"""
+        if indicator == "RSI":
+            if value > 70:
+                return "嚴重超買"
+            elif value > 60:
+                return "偏多"
+            elif value < 30:
+                return "嚴重超賣"
+            elif value < 40:
+                return "偏空"
+            return "中性"
+        elif indicator == "MACD":
+            return "多頭" if value > 0 else "空頭"
+        return "需要進一步分析"
+    
+    def _interpret_fundamental_metric(self, metric: str, value: float) -> str:
+        """解釋基本面指標含義"""
+        if metric == "PE":
+            if value < 10:
+                return "低估值"
+            elif value > 30:
+                return "高估值"
+            return "合理估值"
+        elif metric == "ROE":
+            if value > 0.15:
+                return "獲利能力佳"
+            elif value < 0.05:
+                return "獲利能力差"
+            return "獲利能力中等"
+        return "需要進一步分析"
+
+    def generate_decision_with_reflection(self, 
+                                      stock_analysis: StockAnalysis,
+                                      market_context: MarketContext) -> InvestmentDecision:
+        """使用反思機制生成投資決策"""
+        initial_state = {
+            "stock_analysis": stock_analysis,
+            "market_context": market_context,
+            "sentiment": "neutral",
+            "thoughts": [],
+            "context": {},
+            "decision": None
+        }
+        
+        final_state = self.chain.invoke(initial_state)
+        return final_state["decision"]
+
     def generate_decision(self, 
                          stock_analysis: StockAnalysis,
                          market_context: MarketContext,

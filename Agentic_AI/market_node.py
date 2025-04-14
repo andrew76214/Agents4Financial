@@ -92,7 +92,7 @@ class ReActMarketAgent:
         """
         
         try:
-            response = self.llm.invoke([HumanMessage(content=prompt)])
+            response = self.llm.invoke([HumanMessage(content=prompt)], {"recursion_limit": 20})
             # Clean the response content to ensure it only contains the JSON part
             content = response.content.strip()
             # Remove any markdown code block markers if present
@@ -150,12 +150,13 @@ class ReActMarketAgent:
         2. 上一個想法: {last_thought.thought}
         3. 已有的市場數據: {json.dumps(current_context, indent=2)}
         
-        請思考是否需要額外資訊？如果需要，請說明需要什麼資訊。
+        請思考是否需要額外資訊？如果已有足夠資訊可以作出決策，不需要額外資訊。如果需要，請說明需要什麼資訊。
         
         請以下列格式回答：
         {{
             "thought": "思考過程",
             "need_action": true/false,
+            "ready_to_decide": true/false,
             "action": "price/volume/technical",
             "symbols": ["股票代碼1", "股票代碼2"]
         }}
@@ -164,7 +165,7 @@ class ReActMarketAgent:
         """
         
         try:
-            response = self.llm.invoke([HumanMessage(content=prompt)])
+            response = self.llm.invoke([HumanMessage(content=prompt)], {"recursion_limit": 20})
             # Clean the response content
             content = response.content.strip()
             # Remove any markdown code block markers if present
@@ -211,17 +212,25 @@ class ReActMarketAgent:
                 new_thought.observation = str(data)
                 state["context"].update({thinking["action"]: data})
             
+            # Check if ready to make decision
+            if thinking.get("ready_to_decide", False):
+                return {
+                    "thoughts": state["thoughts"] + [new_thought],
+                    "next": "decide"  # Signal to move to decision stage
+                }
+            
             return {
                 "thoughts": state["thoughts"] + [new_thought]
             }
             
         except json.JSONDecodeError as e:
-            # If JSON parsing fails, return a generic thought
+            # If JSON parsing fails, return a generic thought and move to decision
             new_thought = ThoughtProcess(
                 thought="Error parsing thinking process. Will proceed with available information.",
             )
             return {
-                "thoughts": state["thoughts"] + [new_thought]
+                "thoughts": state["thoughts"] + [new_thought],
+                "next": "decide"
             }
         except Exception as e:
             # Handle any other unexpected errors
@@ -229,7 +238,8 @@ class ReActMarketAgent:
                 thought=f"Unexpected error during thinking process: {str(e)}. Will proceed with available information.",
             )
             return {
-                "thoughts": state["thoughts"] + [new_thought]
+                "thoughts": state["thoughts"] + [new_thought],
+                "next": "decide"
             }
 
     def _make_decision(self, state: MarketState) -> Dict:
@@ -252,7 +262,7 @@ class ReActMarketAgent:
         3. 理由說明
         """
         
-        response = self.llm.invoke([HumanMessage(content=prompt)])
+        response = self.llm.invoke([HumanMessage(content=prompt)], {"recursion_limit": 20})
         return {
             "decisions": state["decisions"] + [response.content]
         }
@@ -265,8 +275,8 @@ class ReActMarketAgent:
                 stock = yf.Ticker(symbol)
                 hist = stock.history(period="1mo")
                 data[symbol] = {
-                    "current": hist["Close"][-1],
-                    "change": (hist["Close"][-1] - hist["Close"][0]) / hist["Close"][0]
+                    "current": hist["Close"].iloc[-1],
+                    "change": (hist["Close"].iloc[-1] - hist["Close"].iloc[0]) / hist["Close"].iloc[0]
                 }
             except Exception as e:
                 data[symbol] = {"error": str(e)}
@@ -285,8 +295,8 @@ class ReActMarketAgent:
                 hist["MACD"] = ta.trend.MACD(hist["Close"]).macd()
                 
                 data[symbol] = {
-                    "RSI": hist["RSI"][-1],
-                    "MACD": hist["MACD"][-1]
+                    "RSI": hist["RSI"].iloc[-1],
+                    "MACD": hist["MACD"].iloc[-1]
                 }
             except Exception as e:
                 data[symbol] = {"error": str(e)}
@@ -299,9 +309,12 @@ class ReActMarketAgent:
             try:
                 stock = yf.Ticker(symbol)
                 hist = stock.history(period="1mo")
+                # Using iloc for positional indexing
+                last_5_volume = hist["Volume"].iloc[-5:]
+                rest_volume = hist["Volume"].iloc[:-5]
                 data[symbol] = {
                     "avg_volume": hist["Volume"].mean(),
-                    "volume_trend": (hist["Volume"][-5:].mean() / hist["Volume"][:-5].mean() - 1)
+                    "volume_trend": (last_5_volume.mean() / rest_volume.mean() - 1)
                 }
             except Exception as e:
                 data[symbol] = {"error": str(e)}
@@ -317,7 +330,14 @@ class ReActMarketAgent:
             "context": {}
         }
         
-        return self.chain.invoke(initial_state)
+        try:
+            return self.chain.invoke(initial_state, {"recursion_limit": 20})
+        except Exception as e:
+            if "Recursion limit of 20 reached" in str(e):
+                # 如果遇到遞迴限制錯誤，直接返回當前狀態
+                return initial_state
+            # 其他錯誤則繼續拋出
+            raise e
 
 # 使用範例
 if __name__ == "__main__":

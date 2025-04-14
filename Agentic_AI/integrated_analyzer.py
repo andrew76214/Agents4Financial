@@ -24,6 +24,7 @@ class AnalysisResult:
     stock_recommendations: List[Dict[str, Any]]
     risk_assessment: Dict[str, Any]
     final_decision: Dict[str, Any]
+    confidence_score: float = 0.0  # Default to 0.0 if not provided
 
 class MarketSentimentAnalyzer:
     """市場情緒分析器"""
@@ -307,6 +308,17 @@ class IntegratedMarketAnalyzer:
         print("\n4. 生成市場決策...")
         market_analysis = self.market_agent.analyze_market(summary)
         
+        # Integrate market analysis into trading signals and risk assessment
+        if market_analysis:
+            if 'signals' in market_analysis:
+                trading_signals.extend(market_analysis['signals'])
+            if 'risks' in market_analysis:
+                risk_assessment['market_risks'].extend(market_analysis['risks'])
+            if 'sentiment' in market_analysis:
+                # Update market context with additional sentiment data
+                market_context.market_sentiment = market_analysis['sentiment']
+        print(market_analysis)
+
         # Create decision agent for detailed stock analysis
         print("\n5. 進行詳細股票分析...")
         decision_agent = DecisionAgent()
@@ -326,9 +338,7 @@ class IntegratedMarketAnalyzer:
             decisions.append(decision)
             
         # Step 4: Compile final analysis result
-        print("\n6. 整合分析結果...")
-        
-        print("\n7. 生成最終決策...")
+        print("\n6. 整合分析結果...生成最終決策...")
         final_result = AnalysisResult(
             transcript_summary=summary,
             market_sentiment=market_context.market_sentiment,
@@ -368,10 +378,18 @@ class IntegratedMarketAnalyzer:
         
         # 考慮技術指標
         if market_context.key_indices:
-            technical_score = sum(
-                1 for v in market_context.key_indices.values() 
-                if isinstance(v, (int, float)) and v > 0
-            ) / len(market_context.key_indices)
+            if isinstance(market_context.key_indices, dict):
+                # Handle dictionary type
+                technical_score = sum(
+                    1 for v in market_context.key_indices.values() 
+                    if isinstance(v, (int, float)) and v > 0
+                ) / len(market_context.key_indices)
+            else:
+                # Handle list type
+                technical_score = sum(
+                    1 for v in market_context.key_indices
+                    if isinstance(v, (int, float)) and v > 0
+                ) / len(market_context.key_indices)
         else:
             technical_score = 0.5
             
