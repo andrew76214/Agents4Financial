@@ -11,6 +11,9 @@ from decision_node import MarketContext, StockAnalysis, DecisionAgent
 
 from constant import model_name
 
+from opencc import OpenCC
+cc = OpenCC('s2twp')  # 簡體轉繁體並使用台灣用詞
+
 @dataclass
 class AnalysisResult:
     """Combined analysis result"""
@@ -24,10 +27,12 @@ class AnalysisResult:
 class IntegratedMarketAnalyzer:
     """Integrated system combining transcript analysis and market decisions"""
     
-    def __init__(self, model_name=model_name):
+    def __init__(self, model_name=model_name, max_iterations=25):
         self.llm = ChatOllama(model=model_name)
         self.transcript_agent = TranscriptAgent(model_name)
         self.market_agent = ReActMarketAgent(model_name)
+        self.max_iterations = max_iterations
+        self.historical_decisions = {}  # Store historical decisions
         
     def extract_market_context(self, summary: str) -> MarketContext:
         """Extract market context from transcript summary"""
@@ -120,22 +125,41 @@ class IntegratedMarketAnalyzer:
     
     def analyze_transcript(self, transcript: str) -> AnalysisResult:
         """Perform complete analysis from transcript to investment decision"""
+        iteration_count = 0
+        
+        print("\n=== 開始分析 ===")
         
         # Step 1: Process transcript and get summary
+        print("\n1. 處理文字稿並生成摘要...")
         transcript_result = self.transcript_agent.process_transcript(transcript)
         summary = transcript_result["summary"]
+        print(f"摘要完成: {summary}")
         
         # Step 2: Extract market context and stock information
+        print("\n2. 提取市場背景資訊...")
         market_context = self.extract_market_context(summary)
+        print(f"市場情緒: {market_context.market_sentiment}")
+        
+        print("\n3. 分析個股資訊...")
         stock_analyses = self.extract_stock_analysis(summary)
+        print(f"找到 {len(stock_analyses)} 支股票進行分析")
         
         # Step 3: Generate market decisions using the market agent
+        print("\n4. 生成市場決策...")
         market_analysis = self.market_agent.analyze_market(summary)
         
         # Create decision agent for detailed stock analysis
+        print("\n5. 進行詳細股票分析...")
         decision_agent = DecisionAgent()
         decisions = []
-        for stock in stock_analyses:
+        for i, stock in enumerate(stock_analyses, 1):
+            print(f"分析股票 {i}/{len(stock_analyses)}: {stock.symbol}")
+            # Check iteration limit
+            iteration_count += 1
+            if iteration_count >= self.max_iterations:
+                print(f"警告: 達到最大迭代次數 ({self.max_iterations}). 進入下一階段.")
+                break
+                
             decision = decision_agent.generate_decision(
                 stock_analysis=stock,
                 market_context=market_context
@@ -143,10 +167,12 @@ class IntegratedMarketAnalyzer:
             decisions.append(decision)
             
         # Step 4: Compile final analysis result
+        print("\n6. 整合分析結果...")
         trading_signals = self._extract_trading_signals(summary)
         risk_assessment = self._assess_overall_risk(market_context, stock_analyses)
         
-        return AnalysisResult(
+        print("\n7. 生成最終決策...")
+        final_result = AnalysisResult(
             transcript_summary=summary,
             market_sentiment=market_context.market_sentiment,
             trading_signals=trading_signals,
@@ -168,6 +194,9 @@ class IntegratedMarketAnalyzer:
             risk_assessment=risk_assessment,
             final_decision=self._make_final_decision(decisions, market_context)
         )
+        
+        print("\n=== 分析完成 ===\n")
+        return final_result
     
     def _extract_trading_signals(self, summary: str) -> List[str]:
         """Extract trading signals from summary"""
@@ -293,19 +322,255 @@ class IntegratedMarketAnalyzer:
             display(Image(self.market_agent.chain.get_graph().draw_mermaid_png()))
         except Exception as e:
             print(f"Error displaying market analysis graph: {e}")
+    
+    def analyze_with_history(self, target_date: str, csv_path: str = './transcripts_video_v1.1.csv') -> AnalysisResult:
+        """
+        Analyze market data up to a target date using historical context
+        
+        Args:
+            target_date: Target date in format YYYY/MM/DD
+            csv_path: Path to CSV file containing transcripts
+        """
+        # Read and preprocess the data
+        df = pd.read_csv(csv_path)
+        
+        # Extract dates from video names and convert to datetime
+        df['date'] = df['video_name'].str.extract(r'(\d{4}/\d{1,2}/\d{1,2})')
+        df['date'] = pd.to_datetime(df['date'], format='%Y/%m/%d')
+        
+        # Filter data up to target date
+        target_date = pd.to_datetime(target_date, format='%Y/%m/%d')
+        historical_data = df[df['date'] <= target_date].sort_values('date')
+        
+        if historical_data.empty:
+            raise ValueError(f"No data found before {target_date}")
+            
+        print(f"\n=== 分析截至 {target_date.strftime('%Y/%m/%d')} 的市場數據 ===")
+        print(f"找到 {len(historical_data)} 條歷史記錄")
+        
+        # Combine all historical transcripts with weights
+        combined_analysis = self._analyze_historical_data(historical_data)
+        
+        return combined_analysis
+        
+    def _analyze_historical_data(self, historical_data: pd.DataFrame) -> AnalysisResult:
+        """Analyze historical data with time-based weights"""
+        
+        all_results = []
+        dates = historical_data['date'].tolist()
+        
+        # Calculate time-based weights (more recent data gets higher weight)
+        max_date = max(dates)
+        weights = [(pd.Timedelta(max_date - date).days + 1) ** -0.5 for date in dates]
+        # Normalize weights
+        weights = [w/sum(weights) for w in weights]
+        
+        print("\n正在分析歷史數據...")
+        
+        for i, (_, row) in enumerate(historical_data.iterrows()):
+            print(f"\n分析 {row['date'].strftime('%Y/%m/%d')} 的數據 ({i+1}/{len(historical_data)})")
+            
+            # Analyze individual transcript
+            result = self.analyze_transcript(row['transcript'])
+            
+            # Store result with its weight
+            all_results.append({
+                'date': row['date'],
+                'weight': weights[i],
+                'result': result
+            })
+            
+            # Store in historical decisions
+            self.historical_decisions[row['date']] = result
+            
+        # Combine all weighted results
+        return self._combine_weighted_results(all_results)
+        
+    def _combine_weighted_results(self, weighted_results: List[Dict]) -> AnalysisResult:
+        """Combine multiple weighted analysis results into a single result"""
+        
+        # Initialize combined values
+        combined_summary = []
+        combined_signals = []
+        combined_recommendations = []
+        all_risks = []
+        
+        # Weight and combine results
+        for wr in weighted_results:
+            weight = wr['weight']
+            result = wr['result']
+            
+            # Combine summaries with dates
+            combined_summary.append(f"[{wr['date'].strftime('%Y/%m/%d')}]: {result.transcript_summary}")
+            
+            # Combine trading signals
+            combined_signals.extend(result.trading_signals)
+            
+            # Weight and combine stock recommendations
+            for rec in result.stock_recommendations:
+                rec['weight'] = weight
+                combined_recommendations.append(rec)
+            
+            # Collect all risks
+            all_risks.extend(result.risk_assessment.get('market_risks', []))
+            all_risks.extend(result.risk_assessment.get('stock_specific_risks', []))
+            
+        # Create final combined result
+        return AnalysisResult(
+            transcript_summary="\n\n".join(combined_summary),
+            market_sentiment=self._get_weighted_sentiment(weighted_results),
+            trading_signals=list(set(combined_signals)),  # Remove duplicates
+            stock_recommendations=self._combine_stock_recommendations(combined_recommendations),
+            risk_assessment={
+                'market_risks': list(set(all_risks)),
+                'risk_level': self._calculate_overall_risk_level(weighted_results)
+            },
+            final_decision=self._make_final_historical_decision(weighted_results)
+        )
+        
+    def _get_weighted_sentiment(self, weighted_results: List[Dict]) -> str:
+        """Calculate weighted market sentiment"""
+        sentiment_scores = {
+            'bullish': 1,
+            'neutral': 0,
+            'bearish': -1
+        }
+        
+        weighted_score = sum(
+            sentiment_scores[r['result'].market_sentiment] * r['weight']
+            for r in weighted_results
+        )
+        
+        if weighted_score > 0.2:
+            return 'bullish'
+        elif weighted_score < -0.2:
+            return 'bearish'
+        return 'neutral'
+        
+    def _combine_stock_recommendations(self, weighted_recommendations: List[Dict]) -> List[Dict]:
+        """Combine weighted stock recommendations"""
+        
+        # Group recommendations by symbol
+        symbol_groups = {}
+        for rec in weighted_recommendations:
+            symbol = rec['symbol']
+            if symbol not in symbol_groups:
+                symbol_groups[symbol] = []
+            symbol_groups[symbol].append(rec)
+            
+        # Combine recommendations for each symbol
+        final_recommendations = []
+        for symbol, recs in symbol_groups.items():
+            total_weight = sum(r['weight'] for r in recs)
+            weighted_action = max(
+                set(r['action'] for r in recs),
+                key=lambda x: sum(r['weight'] for r in recs if r['action'] == x)
+            )
+            
+            # Combine strategies
+            avg_position = sum(r['strategy']['position_size'] * r['weight'] for r in recs) / total_weight
+            
+            final_recommendations.append({
+                'symbol': symbol,
+                'action': weighted_action,
+                'risk_level': max(r['risk_level'] for r in recs),
+                'strategy': {
+                    'position_size': avg_position,
+                    'stop_loss': min(r['strategy']['stop_loss'] for r in recs if r['strategy']['stop_loss'] > 0),
+                    'take_profit': max(r['strategy']['take_profit'] for r in recs),
+                    'time_horizon': 'long-term'  # Using historical data implies longer-term view
+                }
+            })
+            
+        return final_recommendations
+        
+    def _calculate_overall_risk_level(self, weighted_results: List[Dict]) -> str:
+        """Calculate overall risk level from weighted results"""
+        risk_scores = {
+            'HIGH': 2,
+            'MEDIUM': 1,
+            'LOW': 0
+        }
+        
+        weighted_score = sum(
+            risk_scores[r['result'].risk_assessment['risk_level']] * r['weight']
+            for r in weighted_results
+        )
+        
+        if weighted_score > 1.5:
+            return 'HIGH'
+        elif weighted_score > 0.5:
+            return 'MEDIUM'
+        return 'LOW'
+        
+    def _make_final_historical_decision(self, weighted_results: List[Dict]) -> Dict[str, Any]:
+        """Generate final decision considering historical context"""
+        
+        recent_results = sorted(weighted_results, key=lambda x: x['date'])[-3:]  # Look at most recent 3 results
+        recent_weight = 0.7  # Give 70% weight to recent results
+        
+        recent_stance = self._get_weighted_sentiment(recent_results)
+        historical_stance = self._get_weighted_sentiment(weighted_results)
+        
+        final_stance = recent_stance if recent_stance != 'neutral' else historical_stance
+        
+        return {
+            'overall_stance': final_stance,
+            'recent_trend': recent_stance,
+            'historical_context': historical_stance,
+            'recommended_actions': self._combine_stock_recommendations(
+                [rec for wr in weighted_results for rec in wr['result'].stock_recommendations]
+            ),
+            'confidence': 'High' if recent_stance == historical_stance else 'Medium'
+        }
 
-# Example usage
+
 if __name__ == "__main__":
-    # Initialize the integrated analyzer
+    # Initialize the integrated analyzer and opencc converter
     analyzer = IntegratedMarketAnalyzer()
-    
-    # Read sample transcript
+        
+    # Read all transcripts
     df = pd.read_csv('./transcripts_video_v1.1.csv')
-    sample_transcript = df['transcript'].iloc[0]
     
-    # Perform analysis
-    result = analyzer.analyze_transcript(sample_transcript)
+    # Extract dates from video names and convert to datetime
+    df['date'] = df['video_name'].str.extract(r'(\d{4}⧸\d{1,2}⧸\d{1,2})')
+    df['date'] = pd.to_datetime(df['date'], format='%Y⧸%m⧸%d')
     
-    # Generate and print report
-    report = analyzer.generate_report(result)
-    print(report)
+    # Filter data starting from 2023/1/30
+    start_date = pd.to_datetime('2023⧸1⧸30', format='%Y⧸%m⧸%d')
+    df = df[df['date'] >= start_date].sort_values('date')
+    
+    # Convert transcript to traditional Chinese
+    df['transcript'] = df['transcript'].apply(cc.convert)
+    
+    # Initialize results list
+    all_results = []
+    
+    # Process each transcript
+    for idx, row in df.iterrows():
+        print(f"\n分析 {row['date'].strftime('%Y⧸%m⧸%d')} 的資料 ({idx+1}/{len(df)})")
+        
+        # Analyze transcript
+        result = analyzer.analyze_transcript(row['transcript'])
+        
+        # Create result dictionary
+        result_dict = {
+            'date': row['date'].strftime('%Y⧸%m⧸%d'),
+            'market_sentiment': cc.convert(result.market_sentiment),
+            'transcript_summary': cc.convert(result.transcript_summary),
+            'trading_signals': '; '.join(cc.convert(signal) for signal in result.trading_signals),
+            'risk_level': cc.convert(result.risk_assessment['risk_level']),
+            'market_risks': '; '.join(cc.convert(risk) for risk in result.risk_assessment.get('market_risks', [])),
+            'stock_specific_risks': '; '.join(cc.convert(risk) for risk in result.risk_assessment.get('stock_specific_risks', [])),
+            'final_stance': cc.convert(result.final_decision['overall_stance']),
+            'stock_recommendations': cc.convert(str(result.stock_recommendations))
+        }
+        all_results.append(result_dict)
+        
+        # Save intermediate results to csv
+        results_df = pd.DataFrame(all_results)
+        results_df.to_csv('analysis_results.csv', index=False, encoding='utf-8-sig')
+        
+        print(f"已儲存結果到 analysis_results.csv")
+        
+    print("\n分析完成！結果已儲存至 analysis_results.csv")
