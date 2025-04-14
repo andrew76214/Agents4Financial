@@ -1,0 +1,1 @@
+model_name: str = "deepseek-r1:32b"

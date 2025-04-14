@@ -30,6 +30,8 @@ import yfinance as yf
 import pandas as pd
 import ta
 
+from constant import model_name
+
 class MarketSentiment(Enum):
     BULLISH = "bullish"
     BEARISH = "bearish"
@@ -50,7 +52,7 @@ class MarketState(TypedDict):
     context: Dict[str, Any]  # 額外的市場數據
 
 class ReActMarketAgent:
-    def __init__(self, model_name: str = "deepseek-r1:32b"):
+    def __init__(self, model_name=model_name):
         self.llm = ChatOllama(model=model_name)
         self.chain = self._build_chain()
         
@@ -347,11 +349,11 @@ if __name__ == "__main__":
         print(f"- {decision}")
 
 # example usage
-from Agentic_AI.market_node import ReActMarketAgent
+# from Agentic_AI.market_node import ReActMarketAgent
 
-agent = ReActMarketAgent()
-result = agent.analyze_market("""
-    台積電今日營收報告優於預期，
-    外資大舉買超超過50億，
-    但需注意美國CPI數據即將公布
-""")
+# agent = ReActMarketAgent()
+# result = agent.analyze_market("""
+#     台積電今日營收報告優於預期，
+#     外資大舉買超超過50億，
+#     但需注意美國CPI數據即將公布
+# """)

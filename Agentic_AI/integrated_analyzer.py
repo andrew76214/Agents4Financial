@@ -1,10 +1,15 @@
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any
 from dataclasses import dataclass
 import pandas as pd
+import json
 from langchain_ollama import ChatOllama
+from IPython.display import Image, display
 
 from transcript_node import TranscriptAgent, TranscriptProcessor
-from market_node import ReActMarketAgent, MarketContext, StockAnalysis
+from market_node import ReActMarketAgent
+from decision_node import MarketContext, StockAnalysis, DecisionAgent
+
+from constant import model_name
 
 @dataclass
 class AnalysisResult:
@@ -19,7 +24,7 @@ class AnalysisResult:
 class IntegratedMarketAnalyzer:
     """Integrated system combining transcript analysis and market decisions"""
     
-    def __init__(self, model_name: str = "llama2:13b"):
+    def __init__(self, model_name=model_name):
         self.llm = ChatOllama(model=model_name)
         self.transcript_agent = TranscriptAgent(model_name)
         self.market_agent = ReActMarketAgent(model_name)
@@ -35,10 +40,31 @@ class IntegratedMarketAnalyzer:
         1. market_sentiment: Overall market sentiment (bullish/bearish/neutral)
         2. key_indices: Any mentioned market indices and their values
         3. macro_indicators: Any mentioned macro economic indicators
+        
+        You must use the exact JSON format above, with no additional text.
         """
         
         response = self.llm.invoke([{"role": "user", "content": prompt}])
-        context_data = eval(response.content)
+        # Clean the response content to ensure it only contains the JSON part
+        content = response.content.strip()
+        # Remove any markdown code block markers if present
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+        
+        try:
+            context_data = json.loads(content)
+        except json.JSONDecodeError:
+            # Fallback to neutral sentiment if parsing fails
+            context_data = {
+                "market_sentiment": "neutral",
+                "key_indices": {},
+                "macro_indicators": {}
+            }
         
         return MarketContext(
             market_sentiment=context_data["market_sentiment"],
@@ -60,11 +86,26 @@ class IntegratedMarketAnalyzer:
         4. fundamental_metrics: Any mentioned fundamental metrics
         5. risk_factors: Any mentioned risks
         
-        Respond in JSON format as a list of stocks.
+        Respond in JSON format as a list of stocks. Use the exact JSON format, with no additional text.
         """
         
         response = self.llm.invoke([{"role": "user", "content": prompt}])
-        stocks_data = eval(response.content)
+        # Clean the response content to ensure it only contains the JSON part
+        content = response.content.strip()
+        # Remove any markdown code block markers if present
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+        
+        try:
+            stocks_data = json.loads(content)
+        except json.JSONDecodeError:
+            # Fallback to empty list if parsing fails
+            stocks_data = []
         
         return [
             StockAnalysis(
@@ -88,10 +129,14 @@ class IntegratedMarketAnalyzer:
         market_context = self.extract_market_context(summary)
         stock_analyses = self.extract_stock_analysis(summary)
         
-        # Step 3: Generate market decisions for each mentioned stock
+        # Step 3: Generate market decisions using the market agent
+        market_analysis = self.market_agent.analyze_market(summary)
+        
+        # Create decision agent for detailed stock analysis
+        decision_agent = DecisionAgent()
         decisions = []
         for stock in stock_analyses:
-            decision = self.market_agent.generate_decision(
+            decision = decision_agent.generate_decision(
                 stock_analysis=stock,
                 market_context=market_context
             )
@@ -132,11 +177,26 @@ class IntegratedMarketAnalyzer:
         {summary}
         
         Include technical signals, fundamental signals, and market sentiment signals.
-        Respond with a Python list of strings.
+        Return the signals in JSON format as an array of strings, with no additional text.
         """
         
         response = self.llm.invoke([{"role": "user", "content": prompt}])
-        return eval(response.content)
+        # Clean the response content to ensure it only contains the JSON part
+        content = response.content.strip()
+        # Remove any markdown code block markers if present
+        if content.startswith("```json"):
+            content = content[7:]
+        if content.startswith("```"):
+            content = content[3:]
+        if content.endswith("```"):
+            content = content[:-3]
+        content = content.strip()
+        
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            # Fallback to empty list if parsing fails
+            return []
     
     def _assess_overall_risk(self, 
                            market_context: MarketContext,
@@ -224,6 +284,15 @@ class IntegratedMarketAnalyzer:
             report.append(f"• {action['symbol']}: {action['action']} (Confidence: {action['confidence']})")
         
         return "\n".join(report)
+    
+    def print_workflow(self):
+        """Print the market analysis workflow diagram"""
+        print("\nMarket Analysis Workflow:")
+        try:
+            # Try to get and display the workflow graph from market agent
+            display(Image(self.market_agent.chain.get_graph().draw_mermaid_png()))
+        except Exception as e:
+            print(f"Error displaying market analysis graph: {e}")
 
 # Example usage
 if __name__ == "__main__":
@@ -231,7 +300,7 @@ if __name__ == "__main__":
     analyzer = IntegratedMarketAnalyzer()
     
     # Read sample transcript
-    df = pd.read_csv('../transcripts_video_v1.1.csv')
+    df = pd.read_csv('./transcripts_video_v1.1.csv')
     sample_transcript = df['transcript'].iloc[0]
     
     # Perform analysis

@@ -9,8 +9,10 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 
+from constant import model_name
+
 # Initialize LLM
-llm = ChatOllama(model="llama3.2:3b")
+llm = ChatOllama(model=model_name)
 
 class TranscriptProcessor:
     """處理音轉文本和摘要生成的主要類"""
@@ -87,7 +89,7 @@ def summarize(state: State):
     return {"summary": summary, "messages": [HumanMessage(content=summary)]}
 
 class TranscriptAgent:
-    def __init__(self, model_name: str = "llama2:3b"):
+    def __init__(self, model_name=model_name):
         self.llm = ChatOllama(model=model_name)
         self.processor = TranscriptProcessor(self.llm)
         self.chain = self._build_chain()

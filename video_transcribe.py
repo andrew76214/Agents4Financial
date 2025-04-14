@@ -24,8 +24,8 @@ def transcribe_video(model, video_path, converter):
     return traditional_text
 
 def main():
-    video_dir = "stream_video"            # 存放影片的資料夾
-    output_csv = "transcripts_video_v1.1.csv"   # 輸出 CSV 檔案
+    video_dir = "gooaye"            # 存放影片的資料夾
+    output_csv = "transcripts_video_gooaye_v1.0.csv"   # 輸出 CSV 檔案
 
     # 載入 Whisper large-v3 模型
     print("正在載入 Whisper 模型，請稍候...")
