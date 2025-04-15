@@ -443,14 +443,20 @@ class DecisionAgent:
         """決定交易方向"""
         # 整合技術面信號
         technical_score = 0
-        if analysis.technical_indicators.get("RSI", 50) < 30:
-            technical_score += 1
-        if analysis.technical_indicators.get("MACD", 0) > 0:
-            technical_score += 1
+        
+        # Safely handle potentially None technical_indicators
+        if analysis and analysis.technical_indicators:
+            rsi = analysis.technical_indicators.get("RSI", 50)
+            macd = analysis.technical_indicators.get("MACD", 0)
+            
+            if rsi < 30:
+                technical_score += 1
+            if macd > 0:
+                technical_score += 1
             
         # 整合市場情緒
         market_score = 0
-        if market_context.market_sentiment == "bullish":
+        if market_context and market_context.market_sentiment == "bullish":
             market_score += 1
         
         # 綜合判斷

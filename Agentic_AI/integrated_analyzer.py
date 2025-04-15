@@ -836,13 +836,13 @@ if __name__ == "__main__":
         # Create result dictionary
         result_dict = {
             'date': row['date'].strftime('%Y⧸%m⧸%d'),
-            'market_sentiment': cc.convert(result.market_sentiment),
+            'market_sentiment': cc.convert(str(result.market_sentiment)),
             'transcript_summary': cc.convert(result.transcript_summary),
             'trading_signals': '; '.join(cc.convert(signal) for signal in result.trading_signals),
             'risk_level': cc.convert(result.risk_assessment['risk_level']),
             'market_risks': '; '.join(cc.convert(risk) for risk in result.risk_assessment.get('market_risks', [])),
             'stock_specific_risks': '; '.join(cc.convert(risk) for risk in result.risk_assessment.get('stock_specific_risks', [])),
-            'final_stance': cc.convert(result.final_decision['overall_stance']),
+            'final_stance': cc.convert(str(result.final_decision['overall_stance'])),
             'stock_recommendations': cc.convert(str(result.stock_recommendations))
         }
         all_results.append(result_dict)
