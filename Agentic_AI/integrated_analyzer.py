@@ -5,6 +5,7 @@ import json
 import re
 from langchain_ollama import ChatOllama
 from IPython.display import Image, display
+import yfinance as yf  # 新增：用於查詢歷史開盤價
 
 from transcript_node import TranscriptAgent, TranscriptProcessor
 from market_node import ReActMarketAgent
@@ -229,10 +230,9 @@ class IntegratedMarketAnalyzer:
                 
         return correlations
     
-    def extract_stock_analysis(self, summary: str) -> List[StockAnalysis]:
+    def extract_stock_analysis(self, summary: str, analysis_date=None) -> List[StockAnalysis]:
         """Extract stock-specific information and add default stock universe for analysis"""
         try:
-            # 從 stock_pool.json 讀取股票池
             with open('Agentic_AI/stock_pool.json', 'r', encoding='utf-8') as f:
                 stock_pool = json.load(f)
                 default_stocks = stock_pool['stocks']
@@ -246,11 +246,32 @@ class IntegratedMarketAnalyzer:
         # 根據市場趨勢篩選合適的股票
         selected_stocks = self._filter_stocks(default_stocks, market_trends)
         
+        # 查詢每支股票在 analysis_date 的開盤價
+        prices = {}
+        if analysis_date is not None:
+            for stock in selected_stocks:
+                symbol = stock["symbol"]
+                try:
+                    # yfinance 支援美股與部分台股，台股需加 .TW
+                    yf_symbol = symbol
+                    if stock.get("market") == "台股" and not symbol.endswith(".TW"):
+                        yf_symbol = symbol + ".TW"
+                    hist = yf.Ticker(yf_symbol).history(start=analysis_date, end=analysis_date + pd.Timedelta(days=1))
+                    if not hist.empty:
+                        prices[symbol] = float(hist.iloc[0]["Open"])
+                    else:
+                        prices[symbol] = 0.0
+                except Exception as e:
+                    prices[symbol] = 0.0
+        else:
+            for stock in selected_stocks:
+                prices[stock["symbol"]] = 0.0
+        
         # 轉換為StockAnalysis對象
         return [
             StockAnalysis(
                 symbol=stock["symbol"],
-                current_price=0.0,  # 這裡可以接入實時行情數據
+                current_price=prices.get(stock["symbol"], 0.0),
                 technical_indicators=self._get_technical_indicators(stock["symbol"]),
                 fundamental_metrics=self._get_fundamental_metrics(stock["symbol"]),
                 risk_factors=self._assess_stock_risks(stock, market_trends)
@@ -401,7 +422,7 @@ class IntegratedMarketAnalyzer:
         
         return risks
     
-    def analyze_transcript(self, transcript: str) -> AnalysisResult:
+    def analyze_transcript(self, transcript: str, analysis_date=None) -> AnalysisResult:
         """執行完整的分析流程,從講稿到投資決策"""
         iteration_count = 0
         
@@ -416,7 +437,6 @@ class IntegratedMarketAnalyzer:
         # Step 2: 提取市場情緒和股票資訊
         print("\n2. 提取市場背景資訊...")
         market_context = self.extract_market_context(summary)
-        # 標準化market_sentiment的值
         market_context.market_sentiment = market_context.market_sentiment.lower()
         if 'bull' in market_context.market_sentiment:
             market_context.market_sentiment = 'bullish'
@@ -427,7 +447,7 @@ class IntegratedMarketAnalyzer:
         print(f"市場情緒: {market_context.market_sentiment}")
         
         print("\n3. 分析個股資訊...")
-        stock_analyses = self.extract_stock_analysis(summary)
+        stock_analyses = self.extract_stock_analysis(summary, analysis_date=analysis_date)
         print(f"找到 {len(stock_analyses)} 支股票進行分析")
         
         # 計算市場信心指標
@@ -860,7 +880,7 @@ class IntegratedMarketAnalyzer:
             print(f"\n分析 {row['date'].strftime('%Y/%m/%d')} 的數據 ({i+1}/{len(historical_data)})")
             
             # Analyze individual transcript
-            result = self.analyze_transcript(row['transcript'])
+            result = self.analyze_transcript(row['transcript'], analysis_date=row['date'])
             
             # Store result with its weight
             all_results.append({
@@ -1049,7 +1069,7 @@ if __name__ == "__main__":
         print(f"\n分析 {row['date'].strftime('%Y⧸%m⧸%d')} 的資料 ({idx+1}/{len(df)})")
         
         # Analyze transcript
-        result = analyzer.analyze_transcript(row['transcript'])
+        result = analyzer.analyze_transcript(row['transcript'], analysis_date=row['date'])
         
         # Create result dictionary
         result_dict = {
