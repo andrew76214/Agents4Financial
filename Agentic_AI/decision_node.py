@@ -414,10 +414,7 @@ class DecisionAgent:
         
         # 整理決策依據
         reasoning = self._generate_reasoning(
-            stock_analysis,
-            market_context,
-            decision_type,
-            risk_level
+            stock_analysis
         )
         
         # 建立決策物件
@@ -499,42 +496,38 @@ class DecisionAgent:
                 time_horizon="不適用"
             )
     
-    def _generate_reasoning(self,
-                          analysis: StockAnalysis,
-                          market_context: MarketContext,
-                          decision_type: DecisionType,
-                          risk_level: RiskLevel) -> List[str]:
-        """生成決策依據說明"""
-        reasoning = []
+    def _generate_reasoning(self, analysis: StockAnalysis) -> List[str]:
+        """Generate reasoning for the investment decision"""
+        reasons = []
         
-        # 技術面分析
-        tech_reasons = []
-        if analysis.technical_indicators.get("RSI") < 30:
-            tech_reasons.append("RSI指標顯示超賣")
-        if analysis.technical_indicators.get("MACD", 0) > 0:
-            tech_reasons.append("MACD呈現多頭排列")
-        if tech_reasons:
-            reasoning.append(f"技術面分析：{'、'.join(tech_reasons)}")
+        # Technical Analysis
+        if hasattr(analysis, 'technical_indicators') and analysis.technical_indicators:
+            rsi = analysis.technical_indicators.get("RSI")
+            if rsi is not None:
+                if rsi < 30:
+                    reasons.append(f"RSI ({rsi}) indicates oversold conditions")
+                elif rsi > 70:
+                    reasons.append(f"RSI ({rsi}) indicates overbought conditions")
+        
+        # Fundamental Analysis
+        if hasattr(analysis, 'fundamental_metrics') and analysis.fundamental_metrics:
+            pe = analysis.fundamental_metrics.get("PE")
+            if pe is not None:
+                if pe < 15:
+                    reasons.append(f"Low P/E ratio ({pe}) suggests potential value")
+                elif pe > 30:
+                    reasons.append(f"High P/E ratio ({pe}) indicates potential overvaluation")
+        
+        # Risk Factors
+        if hasattr(analysis, 'risk_factors') and analysis.risk_factors:
+            for risk in analysis.risk_factors[:2]:  # Include top 2 risks
+                reasons.append(f"Risk factor: {risk}")
+                
+        # Ensure we have at least one reason
+        if not reasons:
+            reasons.append("Insufficient technical and fundamental data for detailed analysis")
             
-        # 基本面分析
-        fund_reasons = []
-        if analysis.fundamental_metrics.get("PE") < 15:
-            fund_reasons.append("本益比低於產業平均")
-        if analysis.fundamental_metrics.get("ROE", 0) > 0.15:
-            fund_reasons.append("ROE優於同業")
-        if fund_reasons:
-            reasoning.append(f"基本面分析：{'、'.join(fund_reasons)}")
-            
-        # 市場環境
-        reasoning.append(f"市場情緒：{market_context.market_sentiment}")
-        
-        # 風險提示
-        risk_warning = f"風險等級：{risk_level.value}"
-        if risk_level == RiskLevel.HIGH:
-            risk_warning += "，建議謹慎操作，嚴格執行停損"
-        reasoning.append(risk_warning)
-        
-        return reasoning
+        return reasons
     
     def generate_report(self, decision: InvestmentDecision) -> str:
         """生成決策報告"""

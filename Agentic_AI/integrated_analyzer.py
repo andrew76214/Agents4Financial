@@ -104,6 +104,15 @@ class IntegratedMarketAnalyzer:
         self.min_confidence = 0.6  # 最小信心水平
         self.trading_signals = []  # 儲存交易信號
         
+        # 載入股票池
+        try:
+            with open('Agentic_AI/stock_pool.json', 'r', encoding='utf-8') as f:
+                self.stock_pool = json.load(f)
+                print(f"成功載入 {len(self.stock_pool['stocks'])} 支股票")
+        except Exception as e:
+            print(f"Warning: Failed to load stock pool: {e}")
+            self.stock_pool = {"stocks": [], "metadata": {"version": "1.0"}}
+        
     def extract_market_context(self, summary: str) -> MarketContext:
         """從摘要中提取市場背景資訊"""
         prompt = f"""
@@ -221,50 +230,154 @@ class IntegratedMarketAnalyzer:
         return correlations
     
     def extract_stock_analysis(self, summary: str) -> List[StockAnalysis]:
-        """Extract stock-specific information from transcript summary"""
-        prompt = f"""
-        From the following market summary, please extract information about specific stocks:
-        
-        {summary}
-        
-        For each mentioned stock, provide:
-        1. symbol: Stock symbol
-        2. mentioned_price: Any mentioned price
-        3. technical_indicators: Any mentioned technical indicators
-        4. fundamental_metrics: Any mentioned fundamental metrics
-        5. risk_factors: Any mentioned risks
-        
-        Respond in JSON format as a list of stocks. Use the exact JSON format, with no additional text.
-        """
-        
-        response = self.llm.invoke([{"role": "user", "content": prompt}])
-        # Clean the response content to ensure it only contains the JSON part
-        content = response.content.strip()
-        # Remove any markdown code block markers if present
-        if content.startswith("```json"):
-            content = content[7:]
-        if content.startswith("```"):
-            content = content[3:]
-        if content.endswith("```"):
-            content = content[:-3]
-        content = content.strip()
-        
+        """Extract stock-specific information and add default stock universe for analysis"""
         try:
-            stocks_data = json.loads(content)
-        except json.JSONDecodeError:
-            # Fallback to empty list if parsing fails
-            stocks_data = []
+            # 從 stock_pool.json 讀取股票池
+            with open('Agentic_AI/stock_pool.json', 'r', encoding='utf-8') as f:
+                stock_pool = json.load(f)
+                default_stocks = stock_pool['stocks']
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Warning: Failed to load stock pool from file: {e}")
+            return []
         
+        # 從摘要中識別市場狀況和產業趨勢
+        market_trends = self._identify_market_trends(summary)
+        
+        # 根據市場趨勢篩選合適的股票
+        selected_stocks = self._filter_stocks(default_stocks, market_trends)
+        
+        # 轉換為StockAnalysis對象
         return [
             StockAnalysis(
                 symbol=stock["symbol"],
-                current_price=stock.get("mentioned_price", 0.0),
-                technical_indicators=stock.get("technical_indicators", {}),
-                fundamental_metrics=stock.get("fundamental_metrics", {}),
-                risk_factors=stock.get("risk_factors", [])
+                current_price=0.0,  # 這裡可以接入實時行情數據
+                technical_indicators=self._get_technical_indicators(stock["symbol"]),
+                fundamental_metrics=self._get_fundamental_metrics(stock["symbol"]),
+                risk_factors=self._assess_stock_risks(stock, market_trends)
             )
-            for stock in stocks_data
+            for stock in selected_stocks
         ]
+
+    def _identify_market_trends(self, summary: str) -> Dict[str, Any]:
+        """識別市場趨勢和主題"""
+        prompt = f"""
+        從以下市場總結中識別主要趨勢和主題：
+        
+        {summary}
+        
+        請分析：
+        1. 整體市場方向（多頭/空頭/震盪）
+        2. 主要產業趨勢
+        3. 風險因素
+        4. 投資主題
+        
+        以JSON格式回應，不要加入額外文字。
+        """
+        
+        response = self.llm.invoke([{"role": "user", "content": prompt}])
+        content = response.content.strip()
+        
+        try:
+            if content.startswith("```json"):
+                content = content[7:]
+            if content.startswith("```"):
+                content = content[3:]
+            if content.endswith("```"):
+                content = content[:-3]
+            trends = json.loads(content.strip())
+        except json.JSONDecodeError:
+            trends = {
+                "market_direction": "neutral",
+                "industry_trends": ["科技", "AI"],
+                "risk_factors": ["市場波動"],
+                "themes": ["成長"]
+            }
+        
+        return trends
+
+    def _filter_stocks(self, stocks: List[Dict], market_trends: Dict) -> List[Dict]:
+        """根據市場趨勢篩選股票"""
+        filtered_stocks = []
+        
+        # 根據市場方向調整選股策略
+        if market_trends["market_direction"] == "bullish":
+            # 偏好成長股和科技股
+            filtered_stocks = [
+                s for s in stocks 
+                if s["type"] == "科技" or s["sector"] in ["半導體", "電動車", "軟體服務"]
+            ]
+        elif market_trends["market_direction"] == "bearish":
+            # 偏好防禦性股票和價值股
+            filtered_stocks = [
+                s for s in stocks 
+                if s["type"] in ["金融", "傳產"] or s["sector"] in ["飲料", "零售", "銀行"]
+            ]
+        else:
+            # 震盪市場採取均衡策略
+            # 確保不同類型股票都有代表
+            tech_stocks = [s for s in stocks if s["type"] == "科技"][:2]
+            finance_stocks = [s for s in stocks if s["type"] == "金融"][:1]
+            consumer_stocks = [s for s in stocks if s["type"] == "消費"][:1]
+            filtered_stocks = tech_stocks + finance_stocks + consumer_stocks
+        
+        # 按市場分組，確保台股和美股都有合適配置
+        tw_stocks = [s for s in filtered_stocks if s["market"] == "台股"]
+        us_stocks = [s for s in filtered_stocks if s["market"] == "美股"]
+        
+        # 如果某個市場的股票太少，從原始清單中補充
+        if len(tw_stocks) < 2:
+            tw_candidates = [s for s in stocks if s["market"] == "台股" and s not in tw_stocks]
+            tw_stocks.extend(tw_candidates[:2-len(tw_stocks)])
+        
+        if len(us_stocks) < 2:
+            us_candidates = [s for s in stocks if s["market"] == "美股" and s not in us_stocks]
+            us_stocks.extend(us_candidates[:2-len(us_stocks)])
+        
+        filtered_stocks = tw_stocks + us_stocks
+        
+        # 如果篩選後股票太少，從原始清單中補充
+        if len(filtered_stocks) < 4:  # 確保至少有4支股票
+            remaining = [s for s in stocks if s not in filtered_stocks]
+            filtered_stocks.extend(remaining[:4-len(filtered_stocks)])
+        
+        return filtered_stocks
+
+    def _get_technical_indicators(self, symbol: str) -> Dict[str, float]:
+        """取得技術指標"""
+        # TODO: 接入實時技術指標數據
+        return {
+            "RSI": 50.0,
+            "MACD": 0.0,
+            "MA20": 0.0,
+            "MA60": 0.0
+        }
+
+    def _get_fundamental_metrics(self, symbol: str) -> Dict[str, Any]:
+        """取得基本面指標"""
+        # TODO: 接入實時基本面數據
+        return {
+            "PE": 15.0,
+            "PB": 2.0,
+            "ROE": 0.15,
+            "Revenue_Growth": 0.10
+        }
+
+    def _assess_stock_risks(self, stock: Dict, market_trends: Dict[str, Any]) -> List[str]:
+        """評估股票風險"""
+        risks = []
+        
+        # 根據股票類型評估風險
+        if stock["type"] == "科技":
+            risks.append("科技股波動風險")
+        
+        # 根據市場添加區域風險
+        if stock["market"] == "美股":
+            risks.append("匯率風險")
+        
+        # 添加市場趨勢相關風險
+        risks.extend(market_trends.get("risk_factors", []))
+        
+        return risks
     
     def analyze_transcript(self, transcript: str) -> AnalysisResult:
         """執行完整的分析流程,從講稿到投資決策"""
@@ -281,23 +394,30 @@ class IntegratedMarketAnalyzer:
         # Step 2: 提取市場情緒和股票資訊
         print("\n2. 提取市場背景資訊...")
         market_context = self.extract_market_context(summary)
+        # 標準化market_sentiment的值
+        market_context.market_sentiment = market_context.market_sentiment.lower()
+        if 'bull' in market_context.market_sentiment:
+            market_context.market_sentiment = 'bullish'
+        elif 'bear' in market_context.market_sentiment:
+            market_context.market_sentiment = 'bearish'
+        else:
+            market_context.market_sentiment = 'neutral'
         print(f"市場情緒: {market_context.market_sentiment}")
         
         print("\n3. 分析個股資訊...")
         stock_analyses = self.extract_stock_analysis(summary)
         print(f"找到 {len(stock_analyses)} 支股票進行分析")
         
-        # 新增: 計算市場信心指標
+        # 計算市場信心指標
         confidence_score = self._calculate_confidence_score(market_context, stock_analyses)
         
-        # 新增: 生成交易信號
-        trading_signals = self._generate_trading_signals(
-            market_context,
-            stock_analyses,
-            confidence_score
-        )
+        # 生成交易信號
+        trading_signals = self._generate_trading_signals(market_context, stock_analyses, confidence_score)
+        if not trading_signals:
+            trading_signals = [f"市場整體情緒{market_context.market_sentiment}"]
+        print(f"\n生成了 {len(trading_signals)} 個交易信號")
         
-        # 新增: 風險評估
+        # 風險評估
         risk_assessment = self._assess_risk(
             market_context,
             stock_analyses,
@@ -530,22 +650,86 @@ class IntegratedMarketAnalyzer:
                            decisions: List[Any],
                            market_context: MarketContext) -> Dict[str, Any]:
         """Generate final comprehensive decision"""
-        buy_decisions = [d for d in decisions if d.decision_type.value == "買入"]
-        sell_decisions = [d for d in decisions if d.decision_type.value == "賣出"]
+        if not decisions:
+            # 即使沒有具體決策，也基於市場情緒給出建議
+            market_advice = {
+                "bullish": "可考慮逢低布局ETF",
+                "bearish": "建議降低持股比例",
+                "neutral": "維持現有部位，觀察市場動向"
+            }
+            return {
+                "overall_stance": market_context.market_sentiment,
+                "recommended_actions": [{
+                    "symbol": "整體市場",
+                    "action": market_advice.get(market_context.market_sentiment, "觀望"),
+                    "confidence": "Medium"
+                }],
+                "market_context": {
+                    "sentiment": market_context.market_sentiment,
+                    "key_indicators": market_context.key_indices,
+                    "reasoning": ["基於當前市場情緒給出建議"]
+                }
+            }
+
+        # 分析買賣決策
+        buy_decisions = [d for d in decisions if hasattr(d, 'decision_type') and d.decision_type.value == "買入"]
+        sell_decisions = [d for d in decisions if hasattr(d, 'decision_type') and d.decision_type.value == "賣出"]
+        hold_decisions = [d for d in decisions if hasattr(d, 'decision_type') and d.decision_type.value == "觀望"]
+        
+        # 根據決策比例判斷整體立場
+        total_decisions = len(decisions)
+        buy_ratio = len(buy_decisions) / total_decisions if total_decisions > 0 else 0
+        sell_ratio = len(sell_decisions) / total_decisions if total_decisions > 0 else 0
+        
+        # 綜合考慮市場情緒和具體決策
+        if market_context.market_sentiment == "bullish" and buy_ratio > 0.3:
+            stance = "Bullish"
+            confidence = "High"
+        elif market_context.market_sentiment == "bearish" and sell_ratio > 0.3:
+            stance = "Bearish"
+            confidence = "High"
+        else:
+            stance = "Neutral"
+            confidence = "Medium"
+        
+        # 生成具體建議
+        recommendations = []
+        for d in decisions:
+            if not hasattr(d, 'decision_type'):
+                continue
+                
+            action_confidence = "High" if hasattr(d, 'strategy') and d.strategy.position_size > 0.15 else "Medium"
+            
+            # 添加更詳細的建議
+            recommendation = {
+                "symbol": d.target_symbol,
+                "action": d.decision_type.value,
+                "confidence": action_confidence,
+                "position_size": d.strategy.position_size if hasattr(d, 'strategy') else 0.1,
+                "reasoning": d.reasoning if hasattr(d, 'reasoning') else []
+            }
+            
+            # 如果有止損止盈建議，添加進去
+            if hasattr(d, 'strategy'):
+                if d.strategy.stop_loss > 0:
+                    recommendation["stop_loss"] = d.strategy.stop_loss
+                if d.strategy.take_profit > 0:
+                    recommendation["take_profit"] = d.strategy.take_profit
+                    
+            recommendations.append(recommendation)
         
         return {
-            "overall_stance": "Bullish" if len(buy_decisions) > len(sell_decisions) else "Bearish",
-            "recommended_actions": [
-                {
-                    "symbol": d.target_symbol,
-                    "action": d.decision_type.value,
-                    "confidence": "High" if d.strategy.position_size > 0.15 else "Medium"
-                }
-                for d in decisions if d.decision_type.value != "觀望"
-            ],
+            "overall_stance": stance,
+            "confidence": confidence,
+            "recommended_actions": recommendations,
             "market_context": {
                 "sentiment": market_context.market_sentiment,
                 "key_indicators": market_context.key_indices
+            },
+            "summary": {
+                "buy_signals": len(buy_decisions),
+                "sell_signals": len(sell_decisions),
+                "hold_signals": len(hold_decisions)
             }
         }
     
@@ -716,8 +900,17 @@ class IntegratedMarketAnalyzer:
             'bearish': -1
         }
         
+        # 標準化sentiment值
+        def normalize_sentiment(sentiment: str) -> str:
+            sentiment = str(sentiment).lower()
+            if 'bull' in sentiment:
+                return 'bullish'
+            elif 'bear' in sentiment:
+                return 'bearish'
+            return 'neutral'
+        
         weighted_score = sum(
-            sentiment_scores[r['result'].market_sentiment] * r['weight']
+            sentiment_scores[normalize_sentiment(r['result'].market_sentiment)] * r['weight']
             for r in weighted_results
         )
         
@@ -838,19 +1031,27 @@ if __name__ == "__main__":
             'date': row['date'].strftime('%Y⧸%m⧸%d'),
             'market_sentiment': cc.convert(str(result.market_sentiment)),
             'transcript_summary': cc.convert(result.transcript_summary),
-            'trading_signals': '; '.join(cc.convert(signal) for signal in result.trading_signals),
+            'trading_signals': [cc.convert(signal) for signal in result.trading_signals],
             'risk_level': cc.convert(result.risk_assessment['risk_level']),
-            'market_risks': '; '.join(cc.convert(risk) for risk in result.risk_assessment.get('market_risks', [])),
-            'stock_specific_risks': '; '.join(cc.convert(risk) for risk in result.risk_assessment.get('stock_specific_risks', [])),
+            'market_risks': [cc.convert(risk) for risk in result.risk_assessment.get('market_risks', [])],
+            'stock_specific_risks': [cc.convert(risk) for risk in result.risk_assessment.get('stock_specific_risks', [])],
             'final_stance': cc.convert(str(result.final_decision['overall_stance'])),
-            'stock_recommendations': cc.convert(str(result.stock_recommendations))
+            'stock_recommendations': [
+                {
+                    'symbol': rec['symbol'],
+                    'action': cc.convert(rec['action']),
+                    'risk_level': cc.convert(rec['risk_level']),
+                    'strategy': rec['strategy']
+                }
+                for rec in result.stock_recommendations
+            ]
         }
         all_results.append(result_dict)
         
-        # Save intermediate results to csv
-        results_df = pd.DataFrame(all_results)
-        results_df.to_csv('analysis_results.csv', index=False, encoding='utf-8-sig')
+        # Save intermediate results to JSON
+        with open('analysis_results.json', 'w', encoding='utf-8-sig') as f:
+            json.dump(all_results, f, ensure_ascii=False, indent=2)
         
-        print(f"已儲存結果到 analysis_results.csv")
+        print(f"已儲存結果到 analysis_results.json")
         
-    print("\n分析完成！結果已儲存至 analysis_results.csv")
+    print("\n分析完成！結果已儲存至 analysis_results.json")

@@ -5,10 +5,11 @@ A comprehensive financial analysis system that leverages AI agents to process da
 ## Project Overview
 
 This project implements an advanced AI-driven financial analysis system that:
-- Processes YouTube financial video transcripts
-- Analyzes market sentiment and trends
-- Generates actionable investment decisions with risk management
-- Integrates multiple data sources for comprehensive market analysis
+- Processes YouTube financial video transcripts with intelligent text segmentation
+- Performs sentiment analysis with multi-dimensional market evaluation
+- Generates data-driven investment decisions with comprehensive risk management
+- Provides historical analysis with time-weighted insights
+- Integrates multiple data sources for holistic market understanding
 
 ## System Architecture
 
@@ -57,63 +58,55 @@ graph TB
         V[Position Limits] --> P
         W[Stop Loss] --> P
     end
-
-    classDef primary fill:#e1f5fe,stroke:#01579b
-    classDef secondary fill:#f3e5f5,stroke:#4a148c
-    classDef data fill:#efebe9,stroke:#3e2723
-    classDef decision fill:#ffebee,stroke:#b71c1c
-
-    class A,B,C,D,E primary
-    class F,G,H,I,J secondary
-    class K,L,M,N,O,P,Q decision
-    class R,S,T data
-    class U,V,W data
 ```
 
 ### 1. Transcript Processing (transcript_node.py)
-- Processes raw transcripts from financial videos
-- Performs intelligent text segmentation and summarization
-- Extracts key market insights and sentiment indicators
-- Utilizes LangChain and Ollama for natural language processing
+- Intelligent text preprocessing and noise reduction
+- Dynamic text segmentation with overlap handling
+- Advanced summarization with context preservation
+- Keyword and theme extraction for market insights
+- Language model-based semantic analysis
 
 ### 2. Market Analysis (market_node.py)
-- Implements ReAct (Reasoning + Action) architecture for market analysis
-- Processes market data through a multi-stage pipeline:
-  - Analysis → Thinking → Decision
-- Integrates with external data sources (yfinance, technical indicators)
-- Provides dynamic market sentiment assessment
+- ReAct (Reasoning + Action) architecture for dynamic analysis
+- Multi-stage market evaluation pipeline:
+  - Content Analysis → Sentiment Assessment → Market Context
+- Real-time data integration with yfinance
+- Advanced technical indicator calculations with ta-lib
+- Global market correlation analysis
 
 ### 3. Decision Making (decision_node.py)
-- Implements ReAct (Reasoning + Action) architecture for decision making
-- Features advanced reflection and self-improvement capabilities:
-  - Analyze → Think → Decide workflow
-  - Multi-stage thinking process with data gathering
-  - Detailed reasoning and observation tracking
-- Provides two decision generation modes:
-  - Standard mode: Direct analysis and decision
-  - Reflection mode: Deep thinking with multiple analysis cycles
-- Implements comprehensive risk management
-- Produces detailed investment reports with:
-  - Technical analysis
-  - Fundamental metrics
-  - Risk assessments
-  - Position sizing recommendations
-  - Full reasoning trace
+- Dual-mode decision generation:
+  - Standard mode for direct analysis
+  - Reflection mode for deep multi-cycle thinking
+- Comprehensive risk assessment system:
+  - Market risk evaluation
+  - Stock-specific risk analysis
+  - Position sizing optimization
+- Advanced reasoning trace with confidence scoring
+- Multi-factor decision validation
 
 ### 4. Integrated Analysis (integrated_analyzer.py)
-- Combines all components into a unified analysis pipeline
-- Provides historical data analysis capabilities
-- Generates comprehensive market reports
-- Implements sentiment tracking and trend analysis
+- Unified analysis pipeline with weighted historical context
+- Dynamic confidence scoring system
+- Advanced risk management with multiple risk factors
+- Comprehensive reporting with:
+  - Market sentiment tracking
+  - Trading signal generation
+  - Risk assessment matrices
+  - Position recommendations
+  - Historical trend analysis
 
 ## Key Features
 
-- 🤖 AI-Powered Analysis: Utilizes advanced LLM models for market analysis
-- 📈 Technical Analysis: Integrates multiple technical indicators
-- 📊 Fundamental Analysis: Processes company fundamentals and macro indicators
-- 🎯 Risk Management: Built-in risk assessment and position sizing
-- 📝 Detailed Reporting: Generates comprehensive investment reports
-- 🔄 Historical Analysis: Supports historical data processing and backtesting
+- 🤖 Advanced NLP: Utilizes state-of-the-art language models for market analysis
+- 📈 Technical Analysis: Real-time integration of multiple technical indicators
+- 📊 Fundamental Analysis: Deep analysis of company metrics and macro indicators
+- 🎯 Risk Management: Multi-layer risk assessment and position sizing
+- 📝 Detailed Reporting: Comprehensive analysis with reasoning traces
+- 🔄 Historical Analysis: Time-weighted historical data processing
+- 🌐 Global Context: Analysis of international market correlations
+- 📊 Data Integration: Real-time market data processing
 
 ## Prerequisites
 
@@ -126,29 +119,30 @@ graph TB
   - yfinance
   - ta-lib
   - numpy
+  - IPython
 
 ## Setup
 
 1. Clone the repository:
-\`\`\`bash
+```bash
 git clone https://github.com/yourusername/Agents4Financial.git
 cd Agents4Financial
-\`\`\`
+```
 
 2. Install dependencies:
-\`\`\`bash
+```bash
 pip install -r requirements.txt
-\`\`\`
+```
 
 3. Configure the Ollama model in constant.py:
-\`\`\`python
+```python
 model_name = "gemma3:27b"  # or your preferred model
-\`\`\`
+```
 
 ## Usage
 
 ### Basic Usage
-\`\`\`python
+```python
 from Agentic_AI.integrated_analyzer import IntegratedMarketAnalyzer
 from Agentic_AI.decision_node import DecisionAgent
 
@@ -165,33 +159,35 @@ reflective_decision = decision_agent.generate_decision_with_reflection(stock_ana
 # Generate detailed report
 report = decision_agent.generate_report(reflective_decision)
 print(report)
-\`\`\`
+```
 
 ### Historical Analysis
-\`\`\`python
+```python
 # Analyze historical data up to a specific date
 historical_result = analyzer.analyze_with_history("2024/04/14")
-\`\`\`
+```
 
 ## Data Structure
 
 The system uses a modular architecture with several key components:
 
-- **TranscriptAgent**: Processes and summarizes financial transcripts
-- **ReActMarketAgent**: Analyzes market conditions using ReAct architecture
-- **DecisionAgent**: Generates investment decisions with risk management
-- **IntegratedMarketAnalyzer**: Combines all components for comprehensive analysis
+- **TranscriptProcessor**: Low-level text processing and summarization
+- **TranscriptAgent**: High-level transcript analysis workflow
+- **ReActMarketAgent**: Market analysis with reasoning capabilities
+- **DecisionAgent**: Investment decision generation
+- **IntegratedMarketAnalyzer**: System orchestration and analysis pipeline
 
 ## Output Format
 
 The system generates structured analysis results including:
 
-- Market sentiment analysis
-- Trading signals and recommendations
-- Risk assessments
-- Position sizing recommendations
+- Comprehensive market sentiment analysis
+- Data-driven trading signals
+- Multi-factor risk assessments
+- Optimized position sizing
 - Technical and fundamental indicators
-- Historical trend analysis
+- Historical trend analysis with time weighting
+- Global market correlation metrics
 
 ## Contributing
 

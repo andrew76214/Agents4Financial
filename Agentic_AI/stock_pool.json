@@ -1,0 +1,283 @@
+{
+  "stocks": [
+    {
+      "symbol": "2330",
+      "name": "台積電",
+      "type": "科技",
+      "market": "台股",
+      "sector": "半導體",
+      "description": "全球最大晶圓代工廠",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2454",
+      "name": "聯發科",
+      "type": "科技",
+      "market": "台股",
+      "sector": "半導體",
+      "description": "全球最大行動晶片設計公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2317",
+      "name": "鴻海",
+      "type": "科技",
+      "market": "台股",
+      "sector": "電子代工",
+      "description": "全球最大電子代工廠",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2882",
+      "name": "國泰金",
+      "type": "金融",
+      "market": "台股",
+      "sector": "金融保險",
+      "description": "台灣最大金控公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2881",
+      "name": "富邦金",
+      "type": "金融",
+      "market": "台股",
+      "sector": "金融保險",
+      "description": "台灣主要金控公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "1301",
+      "name": "台塑",
+      "type": "傳產",
+      "market": "台股",
+      "sector": "塑化",
+      "description": "台灣最大塑化企業",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2303",
+      "name": "聯電",
+      "type": "科技",
+      "market": "台股",
+      "sector": "半導體",
+      "description": "全球主要晶圓代工廠",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "AAPL",
+      "name": "蘋果",
+      "type": "科技",
+      "market": "美股",
+      "sector": "消費電子",
+      "description": "全球市值最大科技公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "MSFT",
+      "name": "微軟",
+      "type": "科技",
+      "market": "美股",
+      "sector": "軟體服務",
+      "description": "全球最大軟體公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "GOOGL",
+      "name": "谷歌",
+      "type": "科技",
+      "market": "美股",
+      "sector": "網路服務",
+      "description": "全球最大搜尋引擎公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "META",
+      "name": "Meta",
+      "type": "科技",
+      "market": "美股",
+      "sector": "社交媒體",
+      "description": "全球最大社交媒體公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "NVDA",
+      "name": "輝達",
+      "type": "科技",
+      "market": "美股",
+      "sector": "半導體",
+      "description": "全球最大GPU設計公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "TSM",
+      "name": "台積電ADR",
+      "type": "科技",
+      "market": "美股",
+      "sector": "半導體",
+      "description": "台積電美國存託憑證",
+      "currency": "USD"
+    },
+    {
+      "symbol": "JPM",
+      "name": "摩根大通",
+      "type": "金融",
+      "market": "美股",
+      "sector": "銀行",
+      "description": "美國最大銀行",
+      "currency": "USD"
+    },
+    {
+      "symbol": "BAC",
+      "name": "美國銀行",
+      "type": "金融",
+      "market": "美股",
+      "sector": "銀行",
+      "description": "美國主要銀行",
+      "currency": "USD"
+    },
+    {
+      "symbol": "KO",
+      "name": "可口可樂",
+      "type": "消費",
+      "market": "美股",
+      "sector": "飲料",
+      "description": "全球最大飲料公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "WMT",
+      "name": "沃爾瑪",
+      "type": "消費",
+      "market": "美股",
+      "sector": "零售",
+      "description": "全球最大零售商",
+      "currency": "USD"
+    },
+    {
+      "symbol": "AMD",
+      "name": "超微",
+      "type": "科技",
+      "market": "美股",
+      "sector": "半導體",
+      "description": "全球主要CPU和GPU設計公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "TSLA",
+      "name": "特斯拉",
+      "type": "科技",
+      "market": "美股",
+      "sector": "電動車",
+      "description": "全球最大電動車公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "2412",
+      "name": "中華電",
+      "type": "通訊",
+      "market": "台股",
+      "sector": "電信服務",
+      "description": "台灣最大電信公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2308",
+      "name": "台達電",
+      "type": "科技",
+      "market": "台股",
+      "sector": "電子零組件",
+      "description": "全球最大電源管理系統公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2603",
+      "name": "長榮",
+      "type": "航運",
+      "market": "台股",
+      "sector": "運輸",
+      "description": "台灣主要航運公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "2002",
+      "name": "中鋼",
+      "type": "傳產",
+      "market": "台股",
+      "sector": "鋼鐵",
+      "description": "台灣最大鋼鐵公司",
+      "currency": "TWD"
+    },
+    {
+      "symbol": "AMZN",
+      "name": "亞馬遜",
+      "type": "科技",
+      "market": "美股",
+      "sector": "電子商務",
+      "description": "全球最大電商公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "JNJ",
+      "name": "嬌生",
+      "type": "醫療",
+      "market": "美股",
+      "sector": "製藥",
+      "description": "全球最大醫療保健公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "V",
+      "name": "VISA",
+      "type": "金融",
+      "market": "美股",
+      "sector": "支付服務",
+      "description": "全球最大支付網路公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "PFE",
+      "name": "輝瑞",
+      "type": "醫療",
+      "market": "美股",
+      "sector": "製藥",
+      "description": "全球主要製藥公司",
+      "currency": "USD"
+    },
+    {
+      "symbol": "DIS",
+      "name": "迪士尼",
+      "type": "媒體",
+      "market": "美股",
+      "sector": "娛樂",
+      "description": "全球最大娛樂公司",
+      "currency": "USD"
+    }
+  ],
+  "metadata": {
+    "last_updated": "2025-04-15",
+    "version": "1.0",
+    "markets": ["台股", "美股"],
+    "sectors": [
+      "半導體",
+      "電子代工",
+      "金融保險",
+      "塑化",
+      "消費電子",
+      "軟體服務",
+      "網路服務",
+      "社交媒體",
+      "銀行",
+      "飲料",
+      "零售",
+      "電動車",
+      "電信服務",
+      "電子零組件",
+      "運輸",
+      "鋼鐵",
+      "電子商務",
+      "製藥",
+      "支付服務",
+      "娛樂"
+    ]
+  }
+}
