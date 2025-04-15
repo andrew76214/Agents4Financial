@@ -265,59 +265,81 @@ class IntegratedMarketAnalyzer:
         
         {summary}
         
-        請分析：
-        1. 整體市場方向（多頭/空頭/震盪）
-        2. 主要產業趨勢
-        3. 風險因素
-        4. 投資主題
-        
-        以JSON格式回應，不要加入額外文字。
+        請分析並以JSON格式回傳以下資訊:
+        {{
+            "market_direction": "bullish/bearish/neutral",
+            "industry_trends": ["產業1", "產業2"...],
+            "risk_factors": ["風險1", "風險2"...],
+            "themes": ["主題1", "主題2"...]
+        }}
+        只需要回傳JSON格式，不要加入額外文字。
         """
         
         response = self.llm.invoke([{"role": "user", "content": prompt}])
         content = response.content.strip()
         
         try:
+            # Clean up the response content
             if content.startswith("```json"):
                 content = content[7:]
             if content.startswith("```"):
                 content = content[3:]
             if content.endswith("```"):
                 content = content[:-3]
-            trends = json.loads(content.strip())
-        except json.JSONDecodeError:
-            trends = {
+            content = content.strip()
+            
+            trends = json.loads(content)
+            
+            # Ensure all required keys exist with default values
+            default_trends = {
                 "market_direction": "neutral",
                 "industry_trends": ["科技", "AI"],
                 "risk_factors": ["市場波動"],
                 "themes": ["成長"]
             }
-        
-        return trends
+            
+            # Update defaults with actual values while preserving structure
+            for key in default_trends:
+                if key not in trends or not trends[key]:
+                    trends[key] = default_trends[key]
+                    
+            return trends
+            
+        except json.JSONDecodeError:
+            print("Warning: Failed to parse market trends, using defaults")
+            return {
+                "market_direction": "neutral",
+                "industry_trends": ["科技", "AI"],
+                "risk_factors": ["市場波動"],
+                "themes": ["成長"]
+            }
 
     def _filter_stocks(self, stocks: List[Dict], market_trends: Dict) -> List[Dict]:
         """根據市場趨勢篩選股票"""
         filtered_stocks = []
         
+        # Get market direction with fallback to neutral
+        market_direction = market_trends.get("market_direction", "neutral").lower()
+        
         # 根據市場方向調整選股策略
-        if market_trends["market_direction"] == "bullish":
+        if market_direction == "bullish":
             # 偏好成長股和科技股
             filtered_stocks = [
                 s for s in stocks 
-                if s["type"] == "科技" or s["sector"] in ["半導體", "電動車", "軟體服務"]
+                if s.get("type") == "科技" or s.get("sector") in ["半導體", "電動車", "軟體服務"]
             ]
-        elif market_trends["market_direction"] == "bearish":
+        elif market_direction == "bearish":
             # 偏好防禦性股票和價值股
             filtered_stocks = [
                 s for s in stocks 
-                if s["type"] in ["金融", "傳產"] or s["sector"] in ["飲料", "零售", "銀行"]
+                if s.get("type") in ["金融", "傳產"] or s.get("sector") in ["飲料", "零售", "銀行"]
             ]
         else:
             # 震盪市場採取均衡策略
             # 確保不同類型股票都有代表
-            tech_stocks = [s for s in stocks if s["type"] == "科技"][:2]
-            finance_stocks = [s for s in stocks if s["type"] == "金融"][:1]
-            consumer_stocks = [s for s in stocks if s["type"] == "消費"][:1]
+            tech_stocks = [s for s in stocks if s.get("type") == "科技"][:2]
+            finance_stocks = [s for s in stocks if s.get("type") == "金融"][:1]
+            consumer_stocks = [s for s in stocks if s.get("type") == "消費"][:1]
             filtered_stocks = tech_stocks + finance_stocks + consumer_stocks
         
         # 按市場分組，確保台股和美股都有合適配置
