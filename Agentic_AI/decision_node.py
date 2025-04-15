@@ -440,25 +440,23 @@ class DecisionAgent:
         """決定交易方向"""
         # 整合技術面信號
         technical_score = 0
-        
         # Safely handle potentially None technical_indicators
         if analysis and analysis.technical_indicators:
             rsi = analysis.technical_indicators.get("RSI", 50)
             macd = analysis.technical_indicators.get("MACD", 0)
-            
-            if rsi < 30:
+            # 調整：只要 RSI < 40 就加分
+            if rsi < 40:
                 technical_score += 1
             if macd > 0:
                 technical_score += 1
-            
         # 整合市場情緒
         market_score = 0
-        if market_context and market_context.market_sentiment == "bullish":
+        # 調整：bullish 或 neutral 都加分
+        if market_context and market_context.market_sentiment in ["bullish", "neutral"]:
             market_score += 1
-        
         # 綜合判斷
         total_score = technical_score + market_score
-        if total_score >= 2:
+        if total_score >= 1:
             return DecisionType.BUY
         elif total_score <= -1:
             return DecisionType.SELL

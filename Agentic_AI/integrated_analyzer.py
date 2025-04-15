@@ -536,8 +536,11 @@ class IntegratedMarketAnalyzer:
             technical_score = 0.5
             
         # 考慮宏觀指標
-        macro_score = len(market_context.macro_indicators) > 0
-        
+        if market_context.macro_indicators is not None:
+            macro_score = len(market_context.macro_indicators) > 0
+        else:
+            macro_score = False
+            
         # 綜合評分
         confidence = (base_score * 0.5 + 
                      technical_score * 0.3 +
