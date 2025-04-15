@@ -437,30 +437,48 @@ class DecisionAgent:
     def _determine_decision_type(self, 
                                analysis: StockAnalysis,
                                market_context: MarketContext) -> DecisionType:
-        """決定交易方向"""
-        # 整合技術面信號
-        technical_score = 0
-        
-        # Safely handle potentially None technical_indicators
+        """決定交易方向（多維度加分，單一明顯訊號即可觸發）"""
+        score = 0
+        # 技術面
         if analysis and analysis.technical_indicators:
             rsi = analysis.technical_indicators.get("RSI", 50)
             macd = analysis.technical_indicators.get("MACD", 0)
-            
             if rsi < 30:
-                technical_score += 1
+                score += 2  # 強烈超賣
+            elif rsi < 40:
+                score += 1
+            elif rsi > 70:
+                score -= 2  # 強烈超買
+            elif rsi > 60:
+                score -= 1
             if macd > 0:
-                technical_score += 1
-            
-        # 整合市場情緒
-        market_score = 0
-        if market_context and market_context.market_sentiment == "bullish":
-            market_score += 1
-        
-        # 綜合判斷
-        total_score = technical_score + market_score
-        if total_score >= 2:
+                score += 1
+            elif macd < 0:
+                score -= 1
+        # 基本面
+        if analysis and analysis.fundamental_metrics:
+            pe = analysis.fundamental_metrics.get("PE")
+            roe = analysis.fundamental_metrics.get("ROE")
+            if pe is not None:
+                if pe < 12:
+                    score += 1
+                elif pe > 30:
+                    score -= 1
+            if roe is not None:
+                if roe > 0.18:
+                    score += 1
+                elif roe < 0.08:
+                    score -= 1
+        # 市場情緒
+        if market_context and hasattr(market_context, "market_sentiment"):
+            if market_context.market_sentiment == "bullish":
+                score += 1
+            elif market_context.market_sentiment == "bearish":
+                score -= 1
+        # 決策
+        if score >= 2:
             return DecisionType.BUY
-        elif total_score <= -1:
+        elif score <= -2:
             return DecisionType.SELL
         return DecisionType.HOLD
     
