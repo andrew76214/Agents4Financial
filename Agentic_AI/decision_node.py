@@ -458,7 +458,7 @@ class DecisionAgent:
         total_score = technical_score + market_score
         if total_score >= 1:
             return DecisionType.BUY
-        elif score <= -2:
+        elif total_score <= -2:
             return DecisionType.SELL
         return DecisionType.HOLD
     

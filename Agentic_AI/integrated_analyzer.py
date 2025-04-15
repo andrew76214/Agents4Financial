@@ -1,6 +1,7 @@
 from typing import List, Dict, Any
 from dataclasses import dataclass
 import pandas as pd
+import numpy as np
 import json
 import re
 from langchain_ollama import ChatOllama
@@ -386,24 +387,76 @@ class IntegratedMarketAnalyzer:
         return filtered_stocks
 
     def _get_technical_indicators(self, symbol: str) -> Dict[str, float]:
-        """取得技術指標"""
-        # TODO: 接入實時技術指標數據
-        return {
-            "RSI": 50.0,
-            "MACD": 0.0,
-            "MA20": 0.0,
-            "MA60": 0.0
-        }
+        """取得技術指標 (使用 yfinance 實時數據)"""
+        try:
+            yf_symbol = symbol
+            if symbol.endswith('.TW') or symbol.startswith('^'):
+                yf_symbol = symbol
+            elif symbol.isdigit() and len(symbol) == 4:
+                yf_symbol = symbol + '.TW'
+            data = yf.Ticker(yf_symbol).history(period='90d')
+            if data.empty or 'Close' not in data:
+                raise ValueError('No data')
+            close = data['Close']
+            # MA20, MA60
+            ma20 = float(close.rolling(window=20).mean().iloc[-1]) if len(close) >= 20 else float(close.mean())
+            ma60 = float(close.rolling(window=60).mean().iloc[-1]) if len(close) >= 60 else float(close.mean())
+            # RSI
+            delta = close.diff()
+            up = delta.clip(lower=0)
+            down = -1 * delta.clip(upper=0)
+            roll_up = up.rolling(14).mean()
+            roll_down = down.rolling(14).mean()
+            rs = roll_up / (roll_down + 1e-9)
+            rsi = 100.0 - (100.0 / (1.0 + rs))
+            rsi_val = float(rsi.iloc[-1]) if not rsi.isna().all() else 50.0
+            # MACD
+            ema12 = close.ewm(span=12, adjust=False).mean()
+            ema26 = close.ewm(span=26, adjust=False).mean()
+            macd = ema12 - ema26
+            macd_val = float(macd.iloc[-1]) if not macd.isna().all() else 0.0
+            return {
+                "RSI": round(rsi_val, 2),
+                "MACD": round(macd_val, 2),
+                "MA20": round(ma20, 2),
+                "MA60": round(ma60, 2)
+            }
+        except Exception:
+            # fallback
+            return {
+                "RSI": 50.0,
+                "MACD": 0.0,
+                "MA20": 0.0,
+                "MA60": 0.0
+            }
 
     def _get_fundamental_metrics(self, symbol: str) -> Dict[str, Any]:
-        """取得基本面指標"""
-        # TODO: 接入實時基本面數據
-        return {
-            "PE": 15.0,
-            "PB": 2.0,
-            "ROE": 0.15,
-            "Revenue_Growth": 0.10
-        }
+        """取得基本面指標 (使用 yfinance info)"""
+        try:
+            yf_symbol = symbol
+            if symbol.endswith('.TW') or symbol.startswith('^'):
+                yf_symbol = symbol
+            elif symbol.isdigit() and len(symbol) == 4:
+                yf_symbol = symbol + '.TW'
+            ticker = yf.Ticker(yf_symbol)
+            info = ticker.info
+            pe = info.get('trailingPE') or info.get('forwardPE') or 15.0
+            pb = info.get('priceToBook') or 2.0
+            roe = info.get('returnOnEquity') or 0.15
+            rev_growth = info.get('revenueGrowth') or 0.10
+            return {
+                "PE": float(pe) if pe is not None else 15.0,
+                "PB": float(pb) if pb is not None else 2.0,
+                "ROE": float(roe) if roe is not None else 0.15,
+                "Revenue_Growth": float(rev_growth) if rev_growth is not None else 0.10
+            }
+        except Exception:
+            return {
+                "PE": 15.0,
+                "PB": 2.0,
+                "ROE": 0.15,
+                "Revenue_Growth": 0.10
+            }
 
     def _assess_stock_risks(self, stock: Dict, market_trends: Dict[str, Any]) -> List[str]:
         """評估股票風險"""

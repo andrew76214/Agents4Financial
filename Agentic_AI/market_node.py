@@ -267,17 +267,31 @@ class ReActMarketAgent:
             "decisions": state["decisions"] + [response.content]
         }
 
-    def _fetch_price_data(self, symbols: List[str]) -> Dict:
-        """獲取價格數據"""
+    def _fetch_price_data(self, symbols: List[str], analysis_date: Optional[pd.Timestamp] = None) -> Dict:
+        """獲取價格數據，支援指定分析日"""
         data = {}
         for symbol in symbols:
             try:
                 stock = yf.Ticker(symbol)
-                hist = stock.history(period="1mo")
-                data[symbol] = {
-                    "current": hist["Close"].iloc[-1],
-                    "change": (hist["Close"].iloc[-1] - hist["Close"].iloc[0]) / hist["Close"].iloc[0]
-                }
+                if analysis_date is not None:
+                    # 查詢指定日期的開盤價
+                    start = analysis_date
+                    end = analysis_date + pd.Timedelta(days=1)
+                    hist = stock.history(start=start, end=end)
+                    if not hist.empty:
+                        data[symbol] = {
+                            "open": float(hist.iloc[0]["Open"]),
+                            "close": float(hist.iloc[0]["Close"])
+                        }
+                    else:
+                        data[symbol] = {"error": f"No data for {analysis_date.strftime('%Y-%m-%d')}"}
+                else:
+                    # 預設抓最近一個月的收盤價
+                    hist = stock.history(period="1mo")
+                    data[symbol] = {
+                        "current": hist["Close"].iloc[-1],
+                        "change": (hist["Close"].iloc[-1] - hist["Close"].iloc[0]) / hist["Close"].iloc[0]
+                    }
             except Exception as e:
                 data[symbol] = {"error": str(e)}
         return data
