@@ -145,29 +145,8 @@ model_name = "gemma3:27b"  # or your preferred model
 ## Usage
 
 ### Basic Usage
-```python
-from Agentic_AI.integrated_analyzer import IntegratedMarketAnalyzer
-from Agentic_AI.decision_node import DecisionAgent
-
-# Initialize analyzer and decision agent
-analyzer = IntegratedMarketAnalyzer()
-decision_agent = DecisionAgent()
-
-# Standard decision making
-decision = decision_agent.generate_decision(stock_analysis, market_context)
-
-# Advanced decision making with reflection
-reflective_decision = decision_agent.generate_decision_with_reflection(stock_analysis, market_context)
-
-# Generate detailed report
-report = decision_agent.generate_report(reflective_decision)
-print(report)
-```
-
-### Historical Analysis
-```python
-# Analyze historical data up to a specific date
-historical_result = analyzer.analyze_with_history("2024/04/14")
+```bash
+python Agentic_AI/integrated_analyzer.py
 ```
 
 ## Data Structure
