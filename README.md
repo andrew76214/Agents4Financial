@@ -128,7 +128,7 @@ graph TB
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/Agents4Financial.git
+git clone https://github.com/andrew76214/Agents4Financial.git
 cd Agents4Financial
 ```
 
