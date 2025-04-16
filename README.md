@@ -1,148 +1,197 @@
 # Agents4Financial
 
-一個結合 AI 智能代理的金融分析系統，專為自動化處理財經影音逐字稿、整合多元市場數據、產生投資洞見與風險評估而設計。
+A comprehensive financial analysis system that leverages AI agents to process daily financial video transcripts and generate investment insights.
 
-## 專案簡介
+## Project Overview
 
-Agents4Financial 以模組化架構，串接 NLP、技術分析、基本面分析與風險管理，實現：
-- 智能分段與摘要 YouTube 財經影片逐字稿
-- 多維度市場情緒與趨勢分析
-- 結合即時與歷史數據的投資決策生成
-- 全面風險評估與部位建議
-- 跨資料源整合，強化市場全貌理解
+This project implements an advanced AI-driven financial analysis system that:
+- Processes YouTube financial video transcripts with intelligent text segmentation
+- Performs sentiment analysis with multi-dimensional market evaluation
+- Generates data-driven investment decisions with comprehensive risk management
+- Provides historical analysis with time-weighted insights
+- Integrates multiple data sources for holistic market understanding
 
-## 系統架構與流程
+## System Architecture
 
-### 工作流程圖
+### Workflow Diagram
 
 ```mermaid
 graph TB
     subgraph TranscriptAgent
-        A[原始逐字稿] --> B[預處理]
-        B --> C[智能分段]
-        C --> D[摘要/主題萃取]
-        D --> E[摘要結果]
+        A[Raw Transcript] --> B[Preprocess]
+        B --> C[Split Text]
+        C --> D[Summarize]
+        D --> E[Summary Output]
     end
 
     subgraph ReActMarketAgent
-        E --> F[市場分析]
-        F --> G[推理]
-        G --> H{需補充資料?}
-        H -->|是| I[即時數據抓取]
+        E --> F[Analyze Market]
+        F --> G[Think]
+        G --> H{Need More Info?}
+        H -->|Yes| I[Fetch Data]
         I --> G
-        H -->|否| J[決策生成]
+        H -->|No| J[Make Decision]
     end
 
     subgraph DecisionAgent
-        J --> K[初步分析]
-        K --> L[深度推理]
-        L --> M{需細節?}
-        M -->|是| N[多面向分析]
+        J --> K[Initial Analysis]
+        K --> L[Think]
+        L --> M{Need Details?}
+        M -->|Yes| N[Analyze Aspects]
         N --> L
-        M -->|否| O[風險評估]
-        O --> P[策略產生]
-        P --> Q[最終決策]
+        M -->|No| O[Risk Assessment]
+        O --> P[Generate Strategy]
+        P --> Q[Final Decision]
     end
 
-    subgraph DataSources
-        R[(市場數據)] --> I
+    subgraph Data Sources
+        R[(Market Data)] --> I
         R --> N
-        S[(技術指標)] --> I
+        S[(Technical Indicators)] --> I
         S --> N
-        T[(基本面)] --> I
+        T[(Fundamentals)] --> I
         T --> N
     end
 
-    subgraph RiskManagement
-        U[風險等級] --> O
-        V[部位限制] --> P
-        W[停損機制] --> P
+    subgraph Risk Management
+        U[Risk Level] --> O
+        V[Position Limits] --> P
+        W[Stop Loss] --> P
     end
 ```
 
-## 主要模組
+### 1. Transcript Processing (transcript_node.py)
+- Intelligent text preprocessing and noise reduction
+- Dynamic text segmentation with overlap handling
+- Advanced summarization with context preservation
+- Keyword and theme extraction for market insights
+- Language model-based semantic analysis
 
-- **transcript_node.py**：逐字稿預處理、分段、摘要、主題與關鍵字萃取
-- **market_node.py**：ReAct 架構市場分析、情緒判斷、技術指標計算、即時資料整合
-- **decision_node.py**：標準/反思雙模式決策、風險評估、部位優化、信心分數
-- **integrated_analyzer.py**：歷史權重分析、綜合報告產生、動態信心與風險管理
+### 2. Market Analysis (market_node.py)
+- ReAct (Reasoning + Action) architecture for dynamic analysis
+- Multi-stage market evaluation pipeline:
+  - Content Analysis → Sentiment Assessment → Market Context
+- Real-time data integration with yfinance
+- Advanced technical indicator calculations with ta-lib
+- Global market correlation analysis
 
-## 特色功能
+### 3. Decision Making (decision_node.py)
+- Dual-mode decision generation:
+  - Standard mode for direct analysis
+  - Reflection mode for deep multi-cycle thinking
+- Comprehensive risk assessment system:
+  - Market risk evaluation
+  - Stock-specific risk analysis
+  - Position sizing optimization
+- Advanced reasoning trace with confidence scoring
+- Multi-factor decision validation
 
-- 🤖 先進 NLP：語意理解、摘要、主題萃取
-- 📈 技術分析：即時多指標運算
-- 📊 基本面分析：公司與總體經濟指標
-- 🎯 風險管理：多層次風險評估與部位建議
-- 📝 詳細報告：推理過程與信心分數
-- 🔄 歷史分析：時間加權趨勢追蹤
-- 🌐 全球視角：跨市場關聯分析
+### 4. Integrated Analysis (integrated_analyzer.py)
+- Unified analysis pipeline with weighted historical context
+- Dynamic confidence scoring system
+- Advanced risk management with multiple risk factors
+- Comprehensive reporting with:
+  - Market sentiment tracking
+  - Trading signal generation
+  - Risk assessment matrices
+  - Position recommendations
+  - Historical trend analysis
 
-## 安裝需求
+## Multi-Agent Collaboration & Reflection Mechanisms
 
-- Python 3.10 以上
-- 主要套件（pip 安裝）：
-  - langchain
-  - langchain-ollama
-  - opencc
-  - pandas
-  - yfinance
-  - ta-lib
-  - numpy
-  - IPython
+### Multi-Agent System Overview
 
-## 快速開始
+- **TranscriptAgent**: Handles transcript preprocessing, segmentation, summarization, and keyword extraction to ensure high-quality input for downstream analysis.
+- **ReActMarketAgent**: Implements a ReAct (Reasoning + Action) workflow for market sentiment analysis and multi-step reasoning. Dynamically queries real-time data (e.g., price, technical indicators) as needed, and records each reasoning/action step as a `ThoughtProcess`. Supports multi-turn think-act cycles for robust decision-making.
+- **DecisionAgent**: Performs multi-dimensional stock analysis (technical, fundamental, risk) and generates investment decisions. Supports both standard and reflection (multi-turn, self-correcting) modes. In reflection mode, the agent iteratively refines its reasoning, automatically falls back on defaults when errors occur, and logs all errors and reasoning steps.
+- **IntegratedMarketAnalyzer**: Orchestrates all agents, integrates transcript, market, and stock analyses, applies historical weighting, computes confidence scores, and produces comprehensive, structured reports and recommendations.
 
-1. 下載專案：
+### Reflection & Self-Correction Features
+
+- **Multi-Turn Reasoning & Reflection**: Both DecisionAgent and ReActMarketAgent support iterative "think → action → observation" cycles. When information is insufficient or errors are detected, the agent automatically adjusts its reasoning direction and logs each step in `ThoughtProcess`.
+- **Error Handling & Fallbacks**: On data parsing/API/model errors, agents fall back to safe defaults (e.g., neutral sentiment) and record error messages in the reasoning trace for future reference.
+- **Reasoning Trace & Decision Audit**: All reasoning, queries, and decisions are logged for later analysis, enabling identification of failure patterns and continuous improvement.
+- **Historical Result Analysis**: Analysis results and decisions are persistently saved (e.g., `analysis_results.json`), supporting offline mining of failure cases and optimization of agent strategies.
+
+## Key Features
+
+- 🤖 Advanced NLP: Utilizes state-of-the-art language models for market analysis
+- 📈 Technical Analysis: Real-time integration of multiple technical indicators
+- 📊 Fundamental Analysis: Deep analysis of company metrics and macro indicators
+- 🎯 Risk Management: Multi-layer risk assessment and position sizing
+- 📝 Detailed Reporting: Comprehensive analysis with reasoning traces
+- 🔄 Historical Analysis: Time-weighted historical data processing
+- 🌐 Global Context: Analysis of international market correlations
+- 📊 Data Integration: Real-time market data processing
+
+## Setup
+
+1. Clone the repository:
 ```bash
 git clone https://github.com/yourusername/Agents4Financial.git
 cd Agents4Financial
 ```
 
-2. 安裝依賴：
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 設定 Ollama 模型（於 Agentic_AI/constant.py）：
+3. Configure the Ollama model in constant.py:
 ```python
-model_name = "gemma3:27b"  # 或自訂模型
+model_name = "gemma3:27b"  # or your preferred model
 ```
 
-## 使用方式
+## Usage
 
-### 標準分析
+### Basic Usage
 ```python
 from Agentic_AI.integrated_analyzer import IntegratedMarketAnalyzer
 from Agentic_AI.decision_node import DecisionAgent
 
+# Initialize analyzer and decision agent
 analyzer = IntegratedMarketAnalyzer()
 decision_agent = DecisionAgent()
 
+# Standard decision making
 decision = decision_agent.generate_decision(stock_analysis, market_context)
-report = decision_agent.generate_report(decision)
+
+# Advanced decision making with reflection
+reflective_decision = decision_agent.generate_decision_with_reflection(stock_analysis, market_context)
+
+# Generate detailed report
+report = decision_agent.generate_report(reflective_decision)
 print(report)
 ```
 
-### 歷史資料分析
+### Historical Analysis
 ```python
-result = analyzer.analyze_with_history("2024/04/14")
+# Analyze historical data up to a specific date
+historical_result = analyzer.analyze_with_history("2024/04/14")
 ```
 
-## 輸出格式
+## Data Structure
 
-- 市場情緒分析
-- 交易訊號與建議
-- 多因子風險評估
-- 部位建議與技術/基本面指標
-- 歷史趨勢與全球市場關聯
+The system uses a modular architecture with several key components:
 
-## 貢獻方式
+- **TranscriptProcessor**: Low-level text processing and summarization
+- **TranscriptAgent**: High-level transcript analysis workflow
+- **ReActMarketAgent**: Market analysis with reasoning capabilities
+- **DecisionAgent**: Investment decision generation
+- **IntegratedMarketAnalyzer**: System orchestration and analysis pipeline
 
-1. Fork 本專案
-2. 建立功能分支
-3. 提交修改
-4. 發送 Pull Request
+## Output Format
 
-## 授權
+The system generates structured analysis results including:
 
-MIT License，詳見 LICENSE 檔案。
+- Comprehensive market sentiment analysis
+- Data-driven trading signals
+- Multi-factor risk assessments
+- Optimized position sizing
+- Technical and fundamental indicators
+- Historical trend analysis with time weighting
+- Global market correlation metrics
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
