@@ -1,1 +1,1 @@
-model_name: str = "gemma3:27b"
+model_name: str = "qwq:latest"

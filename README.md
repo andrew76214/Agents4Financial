@@ -97,6 +97,22 @@ graph TB
   - Position recommendations
   - Historical trend analysis
 
+## Multi-Agent Collaboration & Reflection Mechanisms
+
+### Multi-Agent System Overview
+
+- **TranscriptAgent**: Handles transcript preprocessing, segmentation, summarization, and keyword extraction to ensure high-quality input for downstream analysis.
+- **ReActMarketAgent**: Implements a ReAct (Reasoning + Action) workflow for market sentiment analysis and multi-step reasoning. Dynamically queries real-time data (e.g., price, technical indicators) as needed, and records each reasoning/action step as a `ThoughtProcess`. Supports multi-turn think-act cycles for robust decision-making.
+- **DecisionAgent**: Performs multi-dimensional stock analysis (technical, fundamental, risk) and generates investment decisions. Supports both standard and reflection (multi-turn, self-correcting) modes. In reflection mode, the agent iteratively refines its reasoning, automatically falls back on defaults when errors occur, and logs all errors and reasoning steps.
+- **IntegratedMarketAnalyzer**: Orchestrates all agents, integrates transcript, market, and stock analyses, applies historical weighting, computes confidence scores, and produces comprehensive, structured reports and recommendations.
+
+### Reflection & Self-Correction Features
+
+- **Multi-Turn Reasoning & Reflection**: Both DecisionAgent and ReActMarketAgent support iterative "think → action → observation" cycles. When information is insufficient or errors are detected, the agent automatically adjusts its reasoning direction and logs each step in `ThoughtProcess`.
+- **Error Handling & Fallbacks**: On data parsing/API/model errors, agents fall back to safe defaults (e.g., neutral sentiment) and record error messages in the reasoning trace for future reference.
+- **Reasoning Trace & Decision Audit**: All reasoning, queries, and decisions are logged for later analysis, enabling identification of failure patterns and continuous improvement.
+- **Historical Result Analysis**: Analysis results and decisions are persistently saved (e.g., `analysis_results.json`), supporting offline mining of failure cases and optimization of agent strategies.
+
 ## Key Features
 
 - 🤖 Advanced NLP: Utilizes state-of-the-art language models for market analysis
@@ -107,19 +123,6 @@ graph TB
 - 🔄 Historical Analysis: Time-weighted historical data processing
 - 🌐 Global Context: Analysis of international market correlations
 - 📊 Data Integration: Real-time market data processing
-
-## Prerequisites
-
-- Python 3.10+
-- Required packages (install via pip):
-  - langchain
-  - langchain-ollama
-  - opencc
-  - pandas
-  - yfinance
-  - ta-lib
-  - numpy
-  - IPython
 
 ## Setup
 
@@ -188,14 +191,6 @@ The system generates structured analysis results including:
 - Technical and fundamental indicators
 - Historical trend analysis with time weighting
 - Global market correlation metrics
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a new Pull Request
 
 ## License
 
