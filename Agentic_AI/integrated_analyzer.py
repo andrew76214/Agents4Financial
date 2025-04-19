@@ -1108,7 +1108,7 @@ if __name__ == "__main__":
     df['date'] = pd.to_datetime(df['date'], format='%Y⧸%m⧸%d')
     
     # Filter data starting from 2023/1/30
-    start_date = pd.to_datetime('2023⧸1⧸30', format='%Y⧸%m⧸%d')
+    start_date = pd.to_datetime('2025⧸4⧸1', format='%Y⧸%m⧸%d')
     df = df[df['date'] >= start_date].sort_values('date')
     
     # Convert transcript to traditional Chinese
