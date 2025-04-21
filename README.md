@@ -2,6 +2,27 @@
 
 A comprehensive financial analysis system that leverages AI agents to process daily financial video transcripts and generate investment insights.
 
+## For 助教
+### 回測績效 1：
+> 時間區間: 2023⧸01⧸30 - 2025⧸04⧸11
+
+> LLM: DeepSeek-R1
+
+- 總投入資金：21520000.00
+- 總獲利：2011428.57
+- 總報酬率：9.35%
+
+### 回測績效 2：
+> 時間區間: 2025⧸04⧸01 - 2025⧸04⧸11
+
+> LLM: qwq
+
+- 總投入資金：240000.00
+- 總獲利：20952.38
+- 總報酬率：8.73%
+
+
+
 ## Project Overview
 
 This project implements an advanced AI-driven financial analysis system that:
